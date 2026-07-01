@@ -26,7 +26,7 @@ class User(Base):
         unique=True
     )
 
-    password_hash: Mapped[str]
+    password: Mapped[str]
 
     role: Mapped[str] = mapped_column(
         String(20),

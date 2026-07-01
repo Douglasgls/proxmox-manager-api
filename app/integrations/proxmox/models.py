@@ -36,3 +36,17 @@ class ShellResult(BaseModel):
     stdout: str
     stderr: str
     success: bool
+
+
+class NetworkBridge(BaseModel):
+    name: str
+    active: bool
+
+
+class TemplateOperationResult(BaseModel):
+    operation: str
+    success: bool
+    message: str
+    storage: str | None = None
+    template: str
+    task_id: str | None = None

@@ -4,10 +4,14 @@ from fastapi import Depends
 from app.dto.request.create_container import (
     CreateContainerDTO
 )
+from app.dto.request.container_network import (
+    UpdateContainerNetworkDTO
+)
 
 from app.dto.response.container import (
     ContainerOperationDTO,
     ContainerResponseDTO,
+    NetworkBridgeDTO,
     ContainerStatusDTO,
 )
 
@@ -31,12 +35,23 @@ def create(
     )
 ):
 
+    # TODO: validar os dados e lembrar de apenas desestruturar o DTO
     return service.create(
         name=dto.name,
         cpu=dto.cpu,
         memory_mb=dto.memory_mb,
         disk_gb=dto.disk_gb,
         image_name=dto.image_name,
+        password=dto.password,
+        bridge=dto.bridge,
+        ip_mode=dto.ip_mode,
+        ip_address=dto.ip_address,
+        cidr=dto.cidr,
+        gateway=dto.gateway,
+        firewall=dto.firewall,
+        mtu=dto.mtu,
+        vlan=dto.vlan,
+        mac_address=dto.mac_address,
     )
 
 
@@ -51,6 +66,19 @@ def list_all(
 ):
 
     return service.list()
+
+
+@router.get(
+    "/proxmox/networks",
+    response_model=list[NetworkBridgeDTO],
+)
+def list_networks(
+    service: ContainerService = Depends(
+        get_container_service
+    )
+):
+
+    return service.list_networks()
 
 
 @router.get(
@@ -162,4 +190,24 @@ def sync(
 
     return service.sync(
         id
+    )
+
+
+@router.patch(
+    "/containers/{id}/network",
+    response_model=ContainerResponseDTO,
+)
+def update_network(
+    id: str,
+    dto: UpdateContainerNetworkDTO,
+    service: ContainerService = Depends(
+        get_container_service
+    )
+):
+
+    return service.update_network(
+        id,
+        **dto.model_dump(
+            exclude_unset=True
+        )
     )

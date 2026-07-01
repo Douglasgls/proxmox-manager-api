@@ -16,6 +16,14 @@ class ContainerResponseDTO(BaseModel):
     memory_mb: int
     disk_gb: int
     ip_address: str | None = None
+    bridge: str | None = None
+    ip_mode: str | None = None
+    cidr: int | None = None
+    gateway: str | None = None
+    firewall: bool | None = False
+    mtu: int | None = None
+    vlan: int | None = None
+    mac_address: str | None = None
     image_name: str | None = None
 
 
@@ -36,3 +44,8 @@ class ContainerOperationDTO(BaseModel):
     success: bool
     message: str
     status: str
+
+
+class NetworkBridgeDTO(BaseModel):
+    name: str
+    active: bool

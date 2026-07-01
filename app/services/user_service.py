@@ -17,8 +17,9 @@ class UserService:
     def create(
         self,
         username: str,
-        password_hash: str,
-        role: str = "admin"
+        password: str,
+        role: str = "admin",
+        email: str = None
     ):
 
         existing = (
@@ -35,7 +36,8 @@ class UserService:
 
         user = User(
             username=username,
-            password_hash=password_hash,
+            password=password,
+            email=email,
             role=role
         )
 

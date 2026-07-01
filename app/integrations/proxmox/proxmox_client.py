@@ -1,4 +1,6 @@
+import json
 import os
+from time import sleep
 from typing import Any
 
 from dotenv import load_dotenv
@@ -15,9 +17,16 @@ from app.integrations.proxmox.exceptions import (
 from app.integrations.proxmox.models import (
     ContainerInfo,
     ContainerStatus,
+    NetworkBridge,
     OperationResult,
+    TemplateOperationResult,
+)
+from app.integrations.proxmox.network_configuration_formatter import (
+    ProxmoxNetworkConfigurationFormatter,
 )
 from app.integrations.proxmox.shell_executor import ShellExecutor
+from app.models.network_configuration import NetworkConfiguration
+from app.models.os_template import OsTemplate
 
 
 class ProxmoxClient:
@@ -25,6 +34,7 @@ class ProxmoxClient:
     def __init__(
         self,
         shell_executor: ShellExecutor | None = None,
+        network_formatter: ProxmoxNetworkConfigurationFormatter | None = None,
     ):
         load_dotenv()
 
@@ -37,6 +47,10 @@ class ProxmoxClient:
         self.default_storage = os.getenv("PROXMOX_DEFAULT_STORAGE")
         self.default_template = os.getenv("PROXMOX_DEFAULT_TEMPLATE")
         self.shell_executor = shell_executor or ShellExecutor()
+        self.network_formatter = (
+            network_formatter
+            or ProxmoxNetworkConfigurationFormatter()
+        )
         self._client = None
 
     def connect(self):
@@ -154,9 +168,11 @@ class ProxmoxClient:
         name: str,
         cpu: int,
         memory_mb: int,
+        network: NetworkConfiguration,
         disk_gb: int = 2,
         image_name: str | None = None,
         storage: str | None = None,
+        password: str | None = None,
     ) -> ContainerInfo:
         container_id = self._next_container_id()
         template = image_name or self.default_template
@@ -173,10 +189,12 @@ class ProxmoxClient:
         params = {
             "vmid": container_id,
             "hostname": name,
+            "password": password,
             "ostemplate": template,
             "cores": cpu,
             "memory": memory_mb,
             "rootfs": f"{target_storage}:{disk_gb}",
+            "net0": self._build_net0(network),
             "unprivileged": 1,
             "start": 0,
         }
@@ -197,8 +215,12 @@ class ProxmoxClient:
                     memory_mb,
                     "--rootfs",
                     f"{target_storage}:{disk_gb}",
+                    "--net0",
+                    self._build_net0(network),
                     "--unprivileged",
                     1,
+                    "--password",
+                    password,
                 )
             else:
                 raise self._api_error(exc) from exc
@@ -216,8 +238,54 @@ class ProxmoxClient:
             cpu=cpu,
             memory_mb=memory_mb,
             disk_gb=disk_gb,
+            ip_address=network.ip_address,
             image_name=template,
         )
+
+    def update_container_network(
+        self,
+        container_id: int,
+        network: NetworkConfiguration,
+    ) -> OperationResult:
+        net0 = self._build_net0(
+            network
+        )
+
+        try:
+            self._lxc_api(container_id).config.put(
+                net0=net0
+            )
+            current_status = self.get_container_status(
+                container_id
+            )
+
+            return OperationResult(
+                container_id=container_id,
+                operation="update_network",
+                success=True,
+                message="Container network updated using Proxmox API.",
+                status=current_status.status,
+                ip_address=current_status.ip_address,
+            )
+        except ResourceException as exc:
+            if self._is_not_found(exc):
+                raise ContainerNotFoundError(
+                    f"Container {container_id} not found"
+                ) from exc
+
+            if not self._can_fallback(exc):
+                raise self._api_error(exc) from exc
+
+            return self._update_container_network_shell(
+                container_id=container_id,
+                net0=net0,
+            )
+        except ShellExecutionError:
+            raise
+        except Exception as exc:
+            raise ContainerOperationError(
+                "Could not update container network"
+            ) from exc
 
     def delete_container(
         self,
@@ -272,6 +340,126 @@ class ProxmoxClient:
         except Exception as exc:
             raise ProxmoxConnectionError(
                 "Could not list Proxmox storage"
+            ) from exc
+
+    def list_networks(self) -> list[NetworkBridge]:
+        try:
+            networks = self._node_api().network.get(
+                type="bridge"
+            )
+            return [
+                self._network_bridge_from_data(network)
+                for network in networks
+                if self._is_bridge_network(network)
+            ]
+        except ResourceException as exc:
+            if self._can_fallback(exc):
+                return self._list_networks_shell()
+            raise self._api_error(exc) from exc
+        except ShellExecutionError:
+            raise
+        except Exception as exc:
+            raise ProxmoxConnectionError(
+                "Could not list Proxmox networks"
+            ) from exc
+
+    def list_available_templates(self) -> list[OsTemplate]:
+        try:
+            templates = self._node_api().aplinfo.get()
+            return [
+                self._available_template_from_data(template)
+                for template in templates
+            ]
+        except ResourceException as exc:
+            if self._can_fallback(exc):
+                return self._list_available_templates_shell()
+            raise self._api_error(exc) from exc
+        except ShellExecutionError:
+            raise
+        except Exception as exc:
+            raise ProxmoxConnectionError(
+                "Could not list available Proxmox templates"
+            ) from exc
+
+    def list_installed_templates(self) -> list[OsTemplate]:
+        templates: list[OsTemplate] = []
+
+        for storage in self._template_storages():
+            templates.extend(
+                self._list_installed_templates_by_storage(
+                    storage
+                )
+            )
+
+        return templates
+
+    def download_template(
+        self,
+        storage: str,
+        template: str,
+    ) -> TemplateOperationResult:
+        try:
+            task_id = self._node_api().aplinfo.post(
+                storage=storage,
+                template=template,
+            )
+            self._wait_for_task(
+                task_id
+            )
+
+            return TemplateOperationResult(
+                operation="download_template",
+                success=True,
+                message="Template downloaded using Proxmox API.",
+                storage=storage,
+                template=template,
+                task_id=str(task_id),
+            )
+        except ResourceException as exc:
+            if self._can_fallback(exc):
+                return self._download_template_shell(
+                    storage=storage,
+                    template=template,
+                )
+            raise self._api_error(exc) from exc
+        except ProxmoxAPIError:
+            raise
+        except ShellExecutionError:
+            raise
+        except Exception as exc:
+            raise ProxmoxConnectionError(
+                "Could not download Proxmox template"
+            ) from exc
+
+    def delete_template(
+        self,
+        template: str,
+    ) -> TemplateOperationResult:
+        storage = self._template_storage(
+            template
+        )
+
+        try:
+            self._node_api().storage(storage).content(template).delete()
+
+            return TemplateOperationResult(
+                operation="delete_template",
+                success=True,
+                message="Template deleted using Proxmox API.",
+                storage=storage,
+                template=template,
+            )
+        except ResourceException as exc:
+            if self._can_fallback(exc):
+                return self._delete_template_shell(
+                    template
+                )
+            raise self._api_error(exc) from exc
+        except ShellExecutionError:
+            raise
+        except Exception as exc:
+            raise ProxmoxConnectionError(
+                "Could not delete Proxmox template"
             ) from exc
 
     def get_version(self) -> dict[str, Any]:
@@ -364,6 +552,40 @@ class ProxmoxClient:
             ip_address=ip_address,
         )
 
+    def _update_container_network_shell(
+        self,
+        container_id: int,
+        net0: str,
+    ) -> OperationResult:
+        self.shell_executor.pct(
+            "set",
+            container_id,
+            "--net0",
+            net0,
+        )
+
+        current_status = self._get_container_status_shell(
+            container_id
+        )
+
+        return OperationResult(
+            container_id=container_id,
+            operation="update_network",
+            success=True,
+            message="Container network updated using local shell fallback.",
+            status=current_status.status,
+            ip_address=current_status.ip_address,
+        )
+
+    def _build_net0(
+        self,
+        network: NetworkConfiguration,
+    ) -> str:
+
+        return self.network_formatter.build_net0(
+            network
+        )
+
     def _node_api(self):
         return self.connect().nodes(self.node)
 
@@ -391,6 +613,52 @@ class ProxmoxClient:
             "No Proxmox storage found for container creation"
         )
 
+    def _template_storages(self) -> list[str]:
+        return [
+            storage["storage"]
+            for storage in self.list_storage()
+            if storage.get("storage")
+            and self._storage_supports_templates(storage)
+        ]
+
+    def _storage_supports_templates(
+        self,
+        storage: dict[str, Any],
+    ) -> bool:
+
+        content = storage.get("content")
+
+        if not content:
+            return True
+
+        return "vztmpl" in str(content).split(",")
+
+    def _list_installed_templates_by_storage(
+        self,
+        storage: str,
+    ) -> list[OsTemplate]:
+        try:
+            templates = self._node_api().storage(storage).content.get(
+                content="vztmpl"
+            )
+            return [
+                self._installed_template_from_data(
+                    template,
+                    storage,
+                )
+                for template in templates
+                if template.get("content") in {
+                    None,
+                    "vztmpl",
+                }
+            ]
+        except ResourceException as exc:
+            if self._can_fallback(exc):
+                return self._list_installed_templates_shell(
+                    storage
+                )
+            raise self._api_error(exc) from exc
+
     def _list_containers_shell(self) -> list[ContainerInfo]:
         result = self.shell_executor.pct("list")
         lines = result.stdout.splitlines()
@@ -415,6 +683,120 @@ class ProxmoxClient:
             )
 
         return containers
+
+    def _list_available_templates_shell(self) -> list[OsTemplate]:
+        result = self.shell_executor.pveam(
+            "available"
+        )
+        templates: list[OsTemplate] = []
+
+        for line in result.stdout.splitlines():
+            filename = self._template_filename_from_line(
+                line
+            )
+
+            if filename:
+                templates.append(
+                    self._template_from_filename(
+                        filename=filename,
+                        downloaded=False,
+                        source="available",
+                    )
+                )
+
+        return templates
+
+    def _list_installed_templates_shell(
+        self,
+        storage: str,
+    ) -> list[OsTemplate]:
+        result = self.shell_executor.pveam(
+            "list",
+            storage,
+        )
+        templates: list[OsTemplate] = []
+
+        for line in result.stdout.splitlines():
+            volume_id = self._template_volume_id_from_line(
+                line
+            )
+
+            if not volume_id:
+                continue
+
+            template_storage = self._template_storage(
+                volume_id
+            )
+            filename = self._template_filename(
+                volume_id
+            )
+            templates.append(
+                self._template_from_filename(
+                    filename=filename,
+                    storage=template_storage,
+                    downloaded=True,
+                    source="installed",
+                    size=self._template_size_from_line(line),
+                )
+            )
+
+        return templates
+
+    def _download_template_shell(
+        self,
+        storage: str,
+        template: str,
+    ) -> TemplateOperationResult:
+        self.shell_executor.pveam(
+            "download",
+            storage,
+            template,
+            timeout=600,
+        )
+
+        return TemplateOperationResult(
+            operation="download_template",
+            success=True,
+            message="Template downloaded using local shell fallback.",
+            storage=storage,
+            template=template,
+        )
+
+    def _delete_template_shell(
+        self,
+        template: str,
+    ) -> TemplateOperationResult:
+        self.shell_executor.pveam(
+            "remove",
+            template,
+        )
+
+        return TemplateOperationResult(
+            operation="delete_template",
+            success=True,
+            message="Template deleted using local shell fallback.",
+            storage=self._template_storage(template),
+            template=template,
+        )
+
+    def _list_networks_shell(self) -> list[NetworkBridge]:
+        result = self.shell_executor.pvesh(
+            "get",
+            f"/nodes/{self.node}/network",
+            "--type",
+            "bridge",
+            "--output-format",
+            "json",
+        )
+        networks = json.loads(
+            result.stdout
+        )
+
+        return [
+            self._network_bridge_from_data(network)
+            for network in networks
+            if self._is_bridge_network(network)
+        ]
 
     def _get_container_shell(
         self,
@@ -480,6 +862,288 @@ class ProxmoxClient:
             memory_mb=self._bytes_to_mb(data.get("maxmem")),
             disk_gb=self._bytes_to_gb(data.get("maxdisk")),
         )
+
+    def _available_template_from_data(
+        self,
+        data: dict[str, Any],
+    ) -> OsTemplate:
+
+        filename = (
+            data.get("template")
+            or data.get("package")
+            or data.get("filename")
+        )
+
+        return self._template_from_filename(
+            filename=filename,
+            distribution=data.get("os"),
+            version=data.get("version"),
+            description=(
+                data.get("headline")
+                or data.get("description")
+            ),
+            downloaded=False,
+            size=data.get("size"),
+            source="available",
+        )
+
+    def _installed_template_from_data(
+        self,
+        data: dict[str, Any],
+        storage: str,
+    ) -> OsTemplate:
+
+        volume_id = data.get("volid") or data.get("volume")
+        filename = self._template_filename(
+            volume_id
+        )
+
+        return self._template_from_filename(
+            filename=filename,
+            storage=storage,
+            downloaded=True,
+            size=data.get("size"),
+            source="installed",
+        )
+
+    def _template_from_filename(
+        self,
+        filename: str,
+        distribution: str | None = None,
+        version: str | None = None,
+        description: str | None = None,
+        storage: str | None = None,
+        downloaded: bool = False,
+        size: int | None = None,
+        source: str | None = None,
+    ) -> OsTemplate:
+
+        return OsTemplate(
+            name=self._template_name(filename),
+            filename=filename,
+            distribution=(
+                distribution
+                or self._template_distribution(filename)
+            ),
+            version=(
+                version
+                or self._template_version(filename)
+            ),
+            architecture=self._template_architecture(filename),
+            description=description,
+            storage=storage,
+            downloaded=downloaded,
+            size=self._int_or_none(size),
+            source=source,
+        )
+
+    def _template_name(
+        self,
+        filename: str,
+    ) -> str:
+
+        return (
+            filename
+            .removesuffix(".tar.zst")
+            .removesuffix(".tar.xz")
+            .removesuffix(".tar.gz")
+        )
+
+    def _template_distribution(
+        self,
+        filename: str,
+    ) -> str | None:
+
+        name = self._template_name(
+            filename
+        )
+        parts = name.split("-")
+
+        if not parts:
+            return None
+
+        return parts[0]
+
+    def _template_version(
+        self,
+        filename: str,
+    ) -> str | None:
+
+        name = self._template_name(
+            filename
+        )
+        parts = name.split("-")
+
+        if len(parts) < 2:
+            return None
+
+        return parts[1]
+
+    def _template_architecture(
+        self,
+        filename: str,
+    ) -> str | None:
+
+        name = self._template_name(
+            filename
+        )
+        _, separator, architecture = name.rpartition("_")
+
+        if not separator:
+            return None
+
+        return architecture
+
+    def _template_filename(
+        self,
+        template: str | None,
+    ) -> str:
+
+        if not template:
+            raise ProxmoxAPIError(
+                "Missing template filename"
+            )
+
+        return template.rsplit("/", 1)[-1]
+
+    def _template_storage(
+        self,
+        template: str,
+    ) -> str:
+
+        storage, separator, _ = template.partition(":")
+
+        if not separator:
+            raise ProxmoxAPIError(
+                "Template reference must include storage"
+            )
+
+        return storage
+
+    def _template_filename_from_line(
+        self,
+        line: str,
+    ) -> str | None:
+
+        parts = line.split()
+
+        for part in reversed(parts):
+            if self._looks_like_template_filename(part):
+                return self._template_filename(part)
+
+        return None
+
+    def _template_volume_id_from_line(
+        self,
+        line: str,
+    ) -> str | None:
+
+        parts = line.split()
+
+        for part in parts:
+            if ":" in part and "vztmpl/" in part:
+                return part
+
+        return None
+
+    def _template_size_from_line(
+        self,
+        line: str,
+    ) -> int | None:
+
+        parts = line.split()
+
+        if len(parts) < 2:
+            return None
+
+        return self._size_to_bytes(
+            parts[-1]
+        )
+
+    def _looks_like_template_filename(
+        self,
+        value: str,
+    ) -> bool:
+
+        return any(
+            value.endswith(extension)
+            for extension in (
+                ".tar.zst",
+                ".tar.xz",
+                ".tar.gz",
+            )
+        )
+
+    def _wait_for_task(
+        self,
+        task_id,
+        timeout_seconds: int = 600,
+    ):
+
+        if not task_id:
+            return
+
+        for _ in range(timeout_seconds):
+            status = self._node_api().tasks(str(task_id)).status.get()
+
+            if status.get("status") == "stopped":
+                if status.get("exitstatus") not in {
+                    None,
+                    "OK",
+                }:
+                    raise ProxmoxAPIError(
+                        f"Proxmox task failed: {status.get('exitstatus')}"
+                    )
+
+                return
+
+            sleep(1)
+
+        raise ProxmoxAPIError(
+            "Timed out waiting for Proxmox task"
+        )
+
+    def _network_bridge_from_data(
+        self,
+        data: dict[str, Any],
+    ) -> NetworkBridge:
+
+        return NetworkBridge(
+            name=data.get("iface") or data.get("name"),
+            active=self._proxmox_bool(
+                data.get("active")
+            ),
+        )
+
+    def _is_bridge_network(
+        self,
+        data: dict[str, Any],
+    ) -> bool:
+
+        network_type = data.get("type")
+
+        return bool(
+            data.get("iface") or data.get("name")
+        ) and network_type in {
+            None,
+            "bridge",
+            "OVSBridge",
+        }
+
+    def _proxmox_bool(
+        self,
+        value,
+    ) -> bool:
+
+        if isinstance(value, str):
+            return value.lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+
+        return bool(value)
 
     def _container_from_status(
         self,
@@ -614,6 +1278,43 @@ class ProxmoxClient:
             return None
 
         return int(int(value) / 1024 / 1024 / 1024)
+
+    def _int_or_none(
+        self,
+        value,
+    ) -> int | None:
+
+        if value is None:
+            return None
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _size_to_bytes(
+        self,
+        value: str,
+    ) -> int | None:
+
+        normalized = value.strip().upper()
+        multipliers = {
+            "K": 1024,
+            "KB": 1024,
+            "M": 1024 ** 2,
+            "MB": 1024 ** 2,
+            "G": 1024 ** 3,
+            "GB": 1024 ** 3,
+        }
+
+        for suffix, multiplier in multipliers.items():
+            if normalized.endswith(suffix):
+                number = normalized.removesuffix(suffix)
+                return int(float(number) * multiplier)
+
+        return self._int_or_none(
+            normalized
+        )
 
     def _cpu_percent(
         self,

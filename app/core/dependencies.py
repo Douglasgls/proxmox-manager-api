@@ -40,6 +40,10 @@ from app.services.job_service import (
     JobService
 )
 
+from app.services.template_service import (
+    TemplateService
+)
+
 from app.services.container_action_service import (
     ContainerActionService
 )
@@ -87,6 +91,16 @@ def get_job_service(db=Depends(get_db)):
 
     return JobService(
         JobRepository(db)
+    )
+
+
+def get_template_service(db=Depends(get_db)):
+
+    return TemplateService(
+        ProxmoxClient(),
+        JobService(
+            JobRepository(db)
+        )
     )
 
 

@@ -22,8 +22,11 @@ def create(
     )
 ):
 
+    # TODO: Implementar validação de email e senha e
+    #  desestruturar o dto sem precisar passar cada campo individualmente.
     return service.create(
         username=dto.username,
-        password_hash=dto.password,
-        role=dto.role
+        password=dto.password,
+        email=dto.email,
+        role=dto.role,
     )
