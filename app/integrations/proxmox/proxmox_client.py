@@ -1,5 +1,8 @@
 import json
+import logging
 import os
+from datetime import datetime
+from time import perf_counter
 from time import sleep
 from typing import Any
 
@@ -15,6 +18,7 @@ from app.integrations.proxmox.exceptions import (
     ShellExecutionError,
 )
 from app.integrations.proxmox.models import (
+    CommandResult,
     ContainerInfo,
     ContainerStatus,
     NetworkBridge,
@@ -27,6 +31,9 @@ from app.integrations.proxmox.network_configuration_formatter import (
 from app.integrations.proxmox.shell_executor import ShellExecutor
 from app.models.network_configuration import NetworkConfiguration
 from app.models.os_template import OsTemplate
+
+
+logger = logging.getLogger(__name__)
 
 
 class ProxmoxClient:
@@ -472,6 +479,17 @@ class ProxmoxClient:
                 "Could not get Proxmox version"
             ) from exc
 
+    def exec(
+        self,
+        container_id: int,
+        command: str,
+    ) -> CommandResult:
+        """Executa um comando administrativo dentro de um container LXC."""
+        return self._exec_container_command_shell(
+            container_id=container_id,
+            command=command,
+        )
+
     def _run_container_operation(
         self,
         container_id: int,
@@ -550,6 +568,93 @@ class ProxmoxClient:
             message=f"Container {operation} executed using local shell fallback.",
             status=status,
             ip_address=ip_address,
+        )
+
+    def _exec_container_command_shell(
+        self,
+        container_id: int,
+        command: str,
+    ) -> CommandResult:
+        executed_at = datetime.now()
+        started_at = perf_counter()
+
+        logger.info(
+            "Executando comando via pct exec no container %s",
+            container_id,
+        )
+
+        try:
+            result = self.shell_executor.pct(
+                "exec",
+                container_id,
+                "--",
+                "sh",
+                "-lc",
+                command,
+            )
+
+            return self._command_result_from_shell(
+                command=command,
+                executed_at=executed_at,
+                duration=perf_counter() - started_at,
+                success=True,
+                stdout=result.stdout,
+                stderr=result.stderr,
+                exit_code=result.exit_code,
+            )
+        except ShellExecutionError as exc:
+            shell_result = getattr(
+                exc,
+                "result",
+                None,
+            )
+
+            logger.warning(
+                "Comando falhou no container %s: %s",
+                container_id,
+                command,
+            )
+
+            return self._command_result_from_shell(
+                command=command,
+                executed_at=executed_at,
+                duration=perf_counter() - started_at,
+                success=False,
+                stdout=(
+                    shell_result.stdout
+                    if shell_result
+                    else ""
+                ),
+                stderr=(
+                    shell_result.stderr
+                    if shell_result
+                    else str(exc)
+                ),
+                exit_code=(
+                    shell_result.exit_code
+                    if shell_result
+                    else 1
+                ),
+            )
+
+    def _command_result_from_shell(
+        self,
+        command: str,
+        executed_at: datetime,
+        duration: float,
+        success: bool,
+        stdout: str,
+        stderr: str,
+        exit_code: int,
+    ) -> CommandResult:
+        return CommandResult(
+            success=success,
+            command=command,
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=exit_code,
+            duration=duration,
+            executed_at=executed_at,
         )
 
     def _update_container_network_shell(

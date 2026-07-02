@@ -6,6 +6,7 @@ from app.integrations.proxmox.exceptions import (
     ShellExecutionError,
 )
 from app.integrations.proxmox.models import (
+    CommandResult,
     ContainerInfo,
     ContainerStatus,
     NetworkBridge,
@@ -13,13 +14,16 @@ from app.integrations.proxmox.models import (
     ShellResult,
     TemplateOperationResult,
 )
+from app.integrations.proxmox.container_session import ContainerSession
 from app.integrations.proxmox.proxmox_client import ProxmoxClient
 from app.integrations.proxmox.shell_executor import ShellExecutor
 
 
 __all__ = [
+    "CommandResult",
     "ContainerNotFoundError",
     "ContainerOperationError",
+    "ContainerSession",
     "ContainerInfo",
     "ContainerStatus",
     "NetworkBridge",

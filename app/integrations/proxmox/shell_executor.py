@@ -46,7 +46,8 @@ class ShellExecutor:
             raise ShellExecutionError(
                 result.stderr
                 or result.stdout
-                or f"Command failed: {' '.join(command)}"
+                or f"Command failed: {' '.join(command)}",
+                result=result,
             )
 
         return result

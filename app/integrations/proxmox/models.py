@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 
 
 class ContainerInfo(BaseModel):
@@ -36,6 +37,16 @@ class ShellResult(BaseModel):
     stdout: str
     stderr: str
     success: bool
+
+
+class CommandResult(BaseModel):
+    success: bool
+    command: str
+    stdout: str
+    stderr: str
+    exit_code: int
+    duration: float
+    executed_at: datetime
 
 
 class NetworkBridge(BaseModel):

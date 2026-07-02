@@ -9,6 +9,16 @@ class ProxmoxAPIError(Exception):
 class ShellExecutionError(Exception):
     """Raised when a local Proxmox command fails."""
 
+    def __init__(
+        self,
+        message: str,
+        result=None,
+    ):
+        super().__init__(
+            message
+        )
+        self.result = result
+
 
 class ContainerNotFoundError(Exception):
     """Raised when a container cannot be found on Proxmox."""
