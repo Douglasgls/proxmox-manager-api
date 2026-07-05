@@ -208,17 +208,32 @@ class ProxmoxClient:
         }
 
         try:
-            upid =  self._node_api().lxc.post(**params)
+            upid = self._node_api().lxc.post(**params)
             print(f"Created container with id {container_id}: {upid}")
 
-            # Espera a criação do container terminar
+            # Aguarda a tarefa de criação terminar
             while True:
                 task = self._node_api().tasks(upid).status.get()
 
                 if task["status"] == "stopped":
-                    if task.get("exitstatus") != "OK":
-                        raise RuntimeError(task.get("exitstatus"))
-                    break
+                    exit_status = task.get("exitstatus", "")
+
+                    if exit_status == "OK":
+                        break
+
+                    if exit_status.startswith("WARNINGS"):
+                        logger.warning(
+                            "Proxmox task finished with warnings: %s",
+                            exit_status,
+                        )
+
+                        # Exibe o(s) warning(s) detalhado(s) da task
+                        for line in self._node_api().tasks(upid).log.get():
+                            logger.warning(line["t"])
+
+                        break
+
+                    raise RuntimeError(exit_status)
 
                 time.sleep(1)
             
