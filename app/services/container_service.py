@@ -112,15 +112,31 @@ class ContainerService:
         logger.info("Container criado.")
 
         logger.info("Iniciando container...")
-        operation_status = self.proxmox_client.start_container(proxmox_container.container_id)
+        self.proxmox_client.start_container(
+            proxmox_container.container_id
+        )
 
         # Aguardar container subir
         max_attempts = 30
+        status = "stopped"
         for _ in range(max_attempts):
-            status_info = self.proxmox_client.get_container_status(proxmox_container.container_id)
-            if status_info.status == operation_status:
+            status_info = self.proxmox_client.get_container_status(
+                proxmox_container.container_id
+            )
+
+            status = status_info.status
+
+            if status == "running":
                 break
+
             time.sleep(1)
+        
+
+        if status != "running":
+            raise ValueError(
+                "Timeout aguardando container iniciar."
+            )
+        
         logger.info("Container iniciado.")
 
         container = Container(
@@ -128,7 +144,7 @@ class ContainerService:
             name=name,
             cpu=cpu,
             memory_mb=memory_mb,
-            status=operation_status,
+            status=status,
             disk_gb=(
                 proxmox_container.disk_gb
                 or 2
@@ -198,6 +214,7 @@ class ContainerService:
     ):
 
         started_at = perf_counter()
+
         container = self._get_container_or_fail(
             container_id
         )
@@ -214,7 +231,7 @@ class ContainerService:
         operation = (
             self.proxmox_client
             .start_container(
-                container.container_number
+                container_id=container.container_number
             )
         )
 
