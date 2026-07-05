@@ -1,7 +1,7 @@
 from app.components.base_components import BaseComponent
 from app.components.definition import ComponentDefinition
 from app.components.dummy_component import DummyComponent
-from app.components.EchoComponents import EchoComponent
+from app.components.EchoComponent import EchoComponent
 
 
 class ComponentRegistry:

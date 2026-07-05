@@ -17,10 +17,16 @@ from app.dto.response.container import (
     ContainerStatusDTO,
 )
 
+from app.components.definition import ComponentDefinition
 from app.integrations.proxmox import (
     ContainerInfo,
     ProxmoxClient,
+    ContainerSession,
 )
+from app.provision.engine import ProvisionEngine
+from app.provision.plan import ProvisionPlan
+import logging
+import time
 
 from app.repositories.container_repository import (
     ContainerRepository
@@ -29,6 +35,8 @@ from app.services.audit_log_service import (
     AuditLogService
 )
 
+logger = logging.getLogger(__name__)
+
 
 class ContainerService:
 
@@ -36,11 +44,13 @@ class ContainerService:
         self,
         repository: ContainerRepository,
         proxmox_client: ProxmoxClient,
-        audit_log_service: AuditLogService | None = None
+        audit_log_service: AuditLogService | None = None,
+        provision_engine: ProvisionEngine | None = None,
     ):
         self.repository = repository
         self.proxmox_client = proxmox_client
         self.audit_log_service = audit_log_service
+        self.provision_engine = provision_engine or ProvisionEngine()
 
 
     def create(
@@ -86,6 +96,7 @@ class ContainerService:
                 "Container já existe"
             )
 
+        logger.info("Criando container...")
         proxmox_container = (
             self.proxmox_client
             .create_container(
@@ -98,13 +109,26 @@ class ContainerService:
                 password=password
             )
         )
+        logger.info("Container criado.")
+
+        logger.info("Iniciando container...")
+        operation_status = self.proxmox_client.start_container(proxmox_container.container_id)
+
+        # Aguardar container subir
+        max_attempts = 30
+        for _ in range(max_attempts):
+            status_info = self.proxmox_client.get_container_status(proxmox_container.container_id)
+            if status_info.status == operation_status:
+                break
+            time.sleep(1)
+        logger.info("Container iniciado.")
 
         container = Container(
             container_number=proxmox_container.container_id,
             name=name,
             cpu=cpu,
             memory_mb=memory_mb,
-            status=proxmox_container.status,
+            status=operation_status,
             disk_gb=(
                 proxmox_container.disk_gb
                 or 2
@@ -133,6 +157,37 @@ class ContainerService:
             success=True,
             message="Container criado no Proxmox e persistido no banco.",
         )
+
+        logger.info("Criando sessão administrativa...")
+        session = ContainerSession(
+            proxmox_client=self.proxmox_client,
+            container_id=proxmox_container.container_id,
+        )
+
+        plan = ProvisionPlan(
+            id="default",
+            name="Default Provision",
+            description="Provisionamento padrão",
+            components=[
+                ComponentDefinition(
+                    name="echo"
+                )
+            ]
+        )
+
+        logger.info("Executando ProvisionPlan...")
+        logger.info("Executando componente Echo...")
+        result = self.provision_engine.execute(
+            plan=plan,
+            session=session,
+        )
+
+        if not result.success:
+            logger.error("Erro no provisionamento: %s", result.error)
+            raise RuntimeError(result.error)
+
+        logger.info("Provisionamento concluído.")
+        logger.info("Container criado com sucesso.")
 
         return created_container
 

@@ -26,6 +26,7 @@ from app.repositories.audit_log_repository import (
 from app.integrations.proxmox import (
     ProxmoxClient
 )
+from app.provision.engine import ProvisionEngine
 
 
 from app.services.user_service import (
@@ -69,6 +70,11 @@ def get_proxmox_client():
     return ProxmoxClient()
 
 
+def get_provision_engine():
+
+    return ProvisionEngine()
+
+
 def get_user_service(db=Depends(get_db)):
 
     return UserService(
@@ -76,14 +82,18 @@ def get_user_service(db=Depends(get_db)):
     )
 
 
-def get_container_service(db=Depends(get_db)):
+def get_container_service(
+    db=Depends(get_db),
+    provision_engine=Depends(get_provision_engine),
+):
 
     return ContainerService(
-        ContainerRepository(db),
-        ProxmoxClient(),
-        AuditLogService(
+        repository=ContainerRepository(db),
+        proxmox_client=ProxmoxClient(),
+        audit_log_service=AuditLogService(
             AuditLogRepository(db)
-        )
+        ),
+        provision_engine=provision_engine,
     )
 
 
