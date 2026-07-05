@@ -12,6 +12,7 @@ from app.services.job_service import (
 )
 
 
+#  remover dependencia direta do JobService
 class TemplateService:
 
     def __init__(
@@ -245,6 +246,7 @@ class TemplateService:
             )
 
 
+# isso deve ser um worker exemplo /app/worker.py
 def run_template_download_job(
     job_id: str,
     storage: str,

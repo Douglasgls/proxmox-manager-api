@@ -1,11 +1,14 @@
 import logging
 from datetime import datetime
 
+from app.components import definition
 from app.components.base_components import BaseComponent
 from app.integrations.proxmox.container_session import ContainerSession
 from app.provision.plan import ProvisionPlan
 from app.provision.result import ProvisionResult
 from app.provision.step import ProvisionStep
+
+from app.components.registry import ComponentRegistry
 
 
 logger = logging.getLogger(__name__)
@@ -28,10 +31,13 @@ class ProvisionEngine:
             plan.name,
         )
 
-        for component in plan.components:
+        for definition in plan.components:
+            component = ComponentRegistry.get(definition)
+        
             step = self._create_step(
                 component
             )
+
             steps.append(
                 step
             )
@@ -72,8 +78,8 @@ class ProvisionEngine:
     def _execute_component(
         self,
         component: BaseComponent,
+        session: ContainerSession,
         step: ProvisionStep,
-        session: ContainerSession
     ):
         step.start(
             started_at=datetime.now(),
@@ -81,8 +87,13 @@ class ProvisionEngine:
         )
 
         # TODO: atualizar progresso do Job antes/depois de cada componente futuramente.
-        install_message = component.install(session)
-        validate_message = component.validate(session)
+        install_message =component.install(
+        session=session,
+        )
+        
+        validate_message = component.validate(
+            session=session
+        )
 
         step.finish(
             finished_at=datetime.now(),

@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+# objetdo de dominio que representa a configuração de rede de um container
+# não pertence nem ao banco nem a API é apenas uma logica de negócio.
+
 
 class NetworkIpMode(StrEnum):
     DHCP = "dhcp"

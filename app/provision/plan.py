@@ -2,6 +2,7 @@
 from collections.abc import Sequence
 
 from app.components.base_components import BaseComponent
+from app.components.definition import ComponentDefinition
 
 
 class ProvisionPlan:
@@ -9,7 +10,7 @@ class ProvisionPlan:
         self,
         name: str,
         description: str,
-        components: Sequence[BaseComponent] | None = None,
+        components: list[ComponentDefinition],
         id: str | None = None,
     ):
         self.id = id

@@ -1,42 +1,42 @@
-from app.models.container_action import (
-    ContainerAction
-)
-from app.repositories.container_action_repository import ( 
-    ContainerActionRepository
-)   
+# from app.models.container_action import (
+#     ContainerAction
+# )
+# from app.repositories.container_action_repository import ( 
+#     ContainerActionRepository
+# )   
 
-class ContainerActionService:
+# class ContainerActionService:
 
-    def __init__(
-        self,
-        repository: ContainerActionRepository
-    ):
-        self.repository = repository
+#     def __init__(
+#         self,
+#         repository: ContainerActionRepository
+#     ):
+#         self.repository = repository
 
 
-    def register(
-        self,
-        container_id,
-        action,
-        status
-    ):
+#     def register(
+#         self,
+#         container_id,
+#         action,
+#         status
+#     ):
 
-        obj = (
-            ContainerAction(
-                container_id=
-                container_id,
+#         obj = (
+#             ContainerAction(
+#                 container_id=
+#                 container_id,
 
-                action=
-                action,
+#                 action=
+#                 action,
 
-                status=
-                status
-            )
-        )
+#                 status=
+#                 status
+#             )
+#         )
 
-        return (
-            self.repository
-            .create(
-                obj
-            )
-        )
+#         return (
+#             self.repository
+#             .create(
+#                 obj
+#             )
+#         )

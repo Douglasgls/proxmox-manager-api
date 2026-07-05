@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+# objetdo de dominio que representa a configuração de rede de um container
+# não pertence nem ao banco nem a API é apenas uma logica de negócio.
 
 @dataclass(frozen=True)
 class OsTemplate:

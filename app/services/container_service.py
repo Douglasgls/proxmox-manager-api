@@ -494,6 +494,9 @@ class ContainerService:
         return updated_container
 
 
+# Private
+# TODO: Todas as validações precisam ser refatoradas para validar tudo de uma vez só, ao invés de validar campo por campo. 
+
     def _get_container_or_fail(
         self,
         container_id

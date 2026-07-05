@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from app.components.base_components import BaseComponent
+from app.integrations.proxmox.container_session import ContainerSession
 
 
 logger = logging.getLogger(__name__)
@@ -10,13 +11,13 @@ logger = logging.getLogger(__name__)
 class DummyComponent(BaseComponent):
     """Componente em memoria para validar o fluxo do provisionamento."""
 
-    def install(self) -> str | None:
+    def install(self,session: ContainerSession,) -> str | None:
         message = "Instalando Dummy..."
         logger.info(message)
 
         return message
 
-    def validate(self) -> str | None:
+    def validate(self,session: ContainerSession,) -> str | None:
         message = "Validando Dummy..."
         success_message = "Finalizado."
         logger.info(message)
@@ -24,7 +25,7 @@ class DummyComponent(BaseComponent):
 
         return success_message
 
-    def rollback(self) -> str | None:
+    def rollback(self,session: ContainerSession,) -> str | None:
         message = "Rollback Dummy..."
         logger.info(message)
 

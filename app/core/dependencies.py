@@ -44,9 +44,9 @@ from app.services.template_service import (
     TemplateService
 )
 
-from app.services.container_action_service import (
-    ContainerActionService
-)
+# from app.services.container_action_service import (
+#     ContainerActionService
+# )
 
 from app.services.audit_log_service import (
     AuditLogService
@@ -104,15 +104,15 @@ def get_template_service(db=Depends(get_db)):
     )
 
 
-def get_container_action_service(
-    db=Depends(get_db)
-):
+# def get_container_action_service(
+#     db=Depends(get_db)
+# ):
 
-    return ContainerActionService(
-        ContainerActionRepository(
-            db
-        )
-    )
+#     return ContainerActionService(
+#         ContainerActionRepository(
+#             db
+#         )
+#     )
 
 
 def get_audit_service(
