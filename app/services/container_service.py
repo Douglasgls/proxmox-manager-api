@@ -116,6 +116,8 @@ class ContainerService:
             proxmox_container.container_id
         )
 
+        time.sleep(10)  
+
         # Aguardar container subir
         max_attempts = 30
         status = "stopped"

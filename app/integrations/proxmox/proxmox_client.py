@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from datetime import datetime
+import time
 from time import perf_counter
 from time import sleep
 from typing import Any
@@ -207,7 +208,20 @@ class ProxmoxClient:
         }
 
         try:
-            self._node_api().lxc.post(**params)
+            upid =  self._node_api().lxc.post(**params)
+            print(f"Created container with id {container_id}: {upid}")
+
+            # Espera a criação do container terminar
+            while True:
+                task = self._node_api().tasks(upid).status.get()
+
+                if task["status"] == "stopped":
+                    if task.get("exitstatus") != "OK":
+                        raise RuntimeError(task.get("exitstatus"))
+                    break
+
+                time.sleep(1)
+            
         except ResourceException as exc:
             if self._can_fallback(exc):
                 self.shell_executor.pct(
