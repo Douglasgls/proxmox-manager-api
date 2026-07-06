@@ -32,3 +32,5 @@ class CreateContainerDTO(BaseModel):
     vlan: int | None = None
 
     mac_address: str | None = None
+
+    components: list[str] = []

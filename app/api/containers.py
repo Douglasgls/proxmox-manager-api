@@ -52,6 +52,7 @@ def create(
         mtu=dto.mtu,
         vlan=dto.vlan,
         mac_address=dto.mac_address,
+        components=dto.components
     )
 
 

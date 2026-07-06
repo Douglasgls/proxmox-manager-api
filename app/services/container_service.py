@@ -70,9 +70,11 @@ class ContainerService:
         mtu=None,
         vlan=None,
         mac_address=None,
+        components=None,
     ):
 
         started_at = perf_counter()
+        components=components or [],
         network = self._build_network(
             bridge=bridge,
             ip_mode=ip_mode,
@@ -187,9 +189,8 @@ class ContainerService:
             name="Default Provision",
             description="Provisionamento padrão",
             components=[
-                ComponentDefinition(
-                    name="echo"
-                )
+                ComponentDefinition(name=name)
+                for name in components
             ]
         )
 

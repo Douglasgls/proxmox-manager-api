@@ -2,6 +2,7 @@ from app.components.base_components import BaseComponent
 from app.components.definition import ComponentDefinition
 from app.components.dummy_component import DummyComponent
 from app.components.EchoComponent import EchoComponent
+from app.components.curl_component import CurlComponent
 
 
 class ComponentRegistry:
@@ -9,6 +10,7 @@ class ComponentRegistry:
     _components: dict[str, type[BaseComponent]] = {
         "dummy": DummyComponent,
         "echo": EchoComponent,
+        "curl": CurlComponent,
     }
 
     @classmethod
