@@ -25,6 +25,7 @@ class ContainerResponseDTO(BaseModel):
     vlan: int | None = None
     mac_address: str | None = None
     image_name: str | None = None
+    components: list[str] = []
 
 
 class ContainerStatusDTO(BaseModel):
