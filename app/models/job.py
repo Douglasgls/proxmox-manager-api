@@ -2,6 +2,7 @@ from uuid import uuid4
 from datetime import datetime
 
 from sqlalchemy import (
+    Integer,
     String,
     ForeignKey,
     Text
@@ -30,7 +31,7 @@ class Job(Base):
 
     status: Mapped[str] = mapped_column(
         String(20),
-        default="pending"
+        default="PENDING"
     )
 
     progress: Mapped[int] = mapped_column(
@@ -41,6 +42,21 @@ class Job(Base):
         ForeignKey(
             "containers.id"
         )
+    )
+
+    container_id: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True
+    )
+
+    current_step: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True
+    )
+
+    current_component: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True
     )
 
     output: Mapped[str | None] = mapped_column(

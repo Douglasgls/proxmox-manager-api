@@ -33,19 +33,23 @@ def domain_validation_error_handler(
 
 
 app.include_router(
-    users
+    tags=["users"],
+    router=users
 )
 
 app.include_router(
-    containers
+    tags=["containers"],
+    router=containers
 )
 
 app.include_router(
-    templates
+    tags=["templates"],
+    router=templates
 )
 
 app.include_router(
-    jobs
+    tags=["jobs"],
+    router=jobs
 )
 
 # app.include_router(
@@ -57,5 +61,6 @@ app.include_router(
 # )
 
 app.include_router(
-    health
+    tags=["health"],
+    router=health
 )

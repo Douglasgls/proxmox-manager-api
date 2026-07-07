@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from collections.abc import Callable
 
 from app.components import definition
 from app.components.base_components import BaseComponent
@@ -22,6 +23,10 @@ class ProvisionEngine:
         self,
         plan: ProvisionPlan,
         session: ContainerSession,
+        on_component_install_start: Callable[[ProvisionStep], None] | None = None,
+        on_component_install_finish: Callable[[ProvisionStep], None] | None = None,
+        on_component_validate_start: Callable[[ProvisionStep], None] | None = None,
+        on_component_validate_finish: Callable[[ProvisionStep], None] | None = None,
     ) -> ProvisionResult:
         started_at = datetime.now()
         steps: list[ProvisionStep] = []
@@ -47,6 +52,10 @@ class ProvisionEngine:
                     component=component,
                     session=session,
                     step=step,
+                    on_component_install_start=on_component_install_start,
+                    on_component_install_finish=on_component_install_finish,
+                    on_component_validate_start=on_component_validate_start,
+                    on_component_validate_finish=on_component_validate_finish,
                 )
 
             except Exception as error:
@@ -80,20 +89,43 @@ class ProvisionEngine:
         component: BaseComponent,
         session: ContainerSession,
         step: ProvisionStep,
+        on_component_install_start: Callable[[ProvisionStep], None] | None = None,
+        on_component_install_finish: Callable[[ProvisionStep], None] | None = None,
+        on_component_validate_start: Callable[[ProvisionStep], None] | None = None,
+        on_component_validate_finish: Callable[[ProvisionStep], None] | None = None,
     ):
         step.start(
             started_at=datetime.now(),
             message="Iniciando componente.",
         )
 
-        # TODO: atualizar progresso do Job antes/depois de cada componente futuramente.
+        if on_component_install_start:
+            on_component_install_start(
+                step
+            )
+
         install_message =component.install(
         session=session,
         )
+
+        if on_component_install_finish:
+            on_component_install_finish(
+                step
+            )
+
+        if on_component_validate_start:
+            on_component_validate_start(
+                step
+            )
         
         validate_message = component.validate(
             session=session
         )
+
+        if on_component_validate_finish:
+            on_component_validate_finish(
+                step
+            )
 
         step.finish(
             finished_at=datetime.now(),

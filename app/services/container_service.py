@@ -17,7 +17,6 @@ from app.dto.response.container import (
     ContainerStatusDTO,
 )
 
-from app.components.definition import ComponentDefinition
 from app.integrations.proxmox import (
     ContainerInfo,
     ProxmoxClient,
@@ -70,11 +69,13 @@ class ContainerService:
         mtu=None,
         vlan=None,
         mac_address=None,
-        components = None,
+        provision_plan: ProvisionPlan | None = None,
+        lifecycle_callbacks: dict | None = None,
+        provision_callbacks: dict | None = None,
     ):
 
         started_at = perf_counter()
-        components=components or []
+        lifecycle = lifecycle_callbacks or {}
         network = self._build_network(
             bridge=bridge,
             ip_mode=ip_mode,
@@ -98,7 +99,11 @@ class ContainerService:
                 "Container já existe"
             )
 
-        logger.info("Criando container...")
+        logger.info("Creating container...")
+        self._notify_lifecycle(
+            lifecycle,
+            "waiting_proxmox_task",
+        )
         proxmox_container = (
             self.proxmox_client
             .create_container(
@@ -111,9 +116,19 @@ class ContainerService:
                 password=password
             )
         )
-        logger.info("Container criado.")
+        logger.info("Container created.")
+        self._notify_lifecycle(
+            lifecycle,
+            "container_created",
+            proxmox_container,
+        )
 
-        logger.info("Iniciando container...")
+        logger.info("Starting container...")
+        self._notify_lifecycle(
+            lifecycle,
+            "container_starting",
+            proxmox_container,
+        )
         self.proxmox_client.start_container(
             proxmox_container.container_id
         )
@@ -141,7 +156,12 @@ class ContainerService:
                 "Timeout aguardando container iniciar."
             )
         
-        logger.info("Container iniciado.")
+        logger.info("Container started.")
+        self._notify_lifecycle(
+            lifecycle,
+            "container_started",
+            proxmox_container,
+        )
 
         container = Container(
             container_number=proxmox_container.container_id,
@@ -169,6 +189,11 @@ class ContainerService:
                 container
             )
         )
+        self._notify_lifecycle(
+            lifecycle,
+            "container_persisted",
+            created_container,
+        )
 
         self._log_action(
             action="create",
@@ -184,33 +209,60 @@ class ContainerService:
             container_id=proxmox_container.container_id,
         )
 
-        plan = ProvisionPlan(
+        plan = provision_plan or ProvisionPlan(
             id="default",
             name="Default Provision",
             description="Provisionamento padrão",
-            components=[
-                ComponentDefinition(
-                    name=name
-                )
-                for name in components
-            ]
+            components=[],
         )
+        callbacks = provision_callbacks or {}
 
-        logger.info("Executando ProvisionPlan...")
-        logger.info("Executando componente Echo...")
+        logger.info("Provisioning components...")
+        self._notify_lifecycle(
+            lifecycle,
+            "provisioning_started",
+            plan,
+        )
         result = self.provision_engine.execute(
             plan=plan,
             session=session,
+            on_component_install_start=callbacks.get(
+                "install_start"
+            ),
+            on_component_install_finish=callbacks.get(
+                "install_finish"
+            ),
+            on_component_validate_start=callbacks.get(
+                "validate_start"
+            ),
+            on_component_validate_finish=callbacks.get(
+                "validate_finish"
+            ),
         )
 
         if not result.success:
             logger.error("Erro no provisionamento: %s", result.error)
             raise RuntimeError(result.error)
 
-        logger.info("Provisionamento concluído.")
-        logger.info("Container criado com sucesso.")
+        logger.info("Provisioning completed.")
+        logger.info("Container created successfully.")
 
         return created_container
+
+    def _notify_lifecycle(
+        self,
+        lifecycle_callbacks: dict,
+        event: str,
+        value=None,
+    ):
+        callback = lifecycle_callbacks.get(
+            event
+        )
+
+        if callback:
+            callback(
+                value
+            )
 
 
     def start(
@@ -485,7 +537,6 @@ class ContainerService:
         )
 
         return updated_container
-
 
     def list(self):
 

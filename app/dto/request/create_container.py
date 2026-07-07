@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from pydantic import Field
 
 
 class CreateContainerDTO(BaseModel):
@@ -33,4 +34,6 @@ class CreateContainerDTO(BaseModel):
 
     mac_address: str | None = None
 
-    components: list[str] = []
+    components: list[str] = Field(
+        default_factory=list
+    )

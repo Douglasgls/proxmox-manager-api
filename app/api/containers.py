@@ -1,5 +1,7 @@
 from fastapi import APIRouter
+from fastapi import BackgroundTasks
 from fastapi import Depends
+from fastapi import status
 
 from app.dto.request.create_container import (
     CreateContainerDTO
@@ -16,8 +18,11 @@ from app.dto.response.container import (
 )
 
 from app.core.dependencies import (
-    get_container_service
+    get_container_service,
+    get_container_creation_workflow,
 )
+from app.dto.response.job import JobCreatedResponseDTO
+from app.services.container_creation_workflow import ContainerCreationWorkflow
 from app.services.container_service import ContainerService
 
 
@@ -26,35 +31,28 @@ router = APIRouter()
 
 @router.post(
     "/containers",
-    response_model=ContainerResponseDTO,
+    response_model=JobCreatedResponseDTO,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 def create(
     dto: CreateContainerDTO,
-    service: ContainerService = Depends(
-        get_container_service
-    )
+    background_tasks: BackgroundTasks,
+    workflow: ContainerCreationWorkflow = Depends(
+        get_container_creation_workflow
+    ),
 ):
 
-    # TODO: validar os dados e lembrar de apenas desestruturar o DTO
-    return service.create(
-        name=dto.name,
-        cpu=dto.cpu,
-        memory_mb=dto.memory_mb,
-        disk_gb=dto.disk_gb,
-        image_name=dto.image_name,
-        password=dto.password,
-        bridge=dto.bridge,
-        ip_mode=dto.ip_mode,
-        ip_address=dto.ip_address,
-        cidr=dto.cidr,
-        gateway=dto.gateway,
-        firewall=dto.firewall,
-        mtu=dto.mtu,
-        vlan=dto.vlan,
-        mac_address=dto.mac_address,
-        components=dto.components
+    job = workflow.create_job()
+
+    background_tasks.add_task(
+        workflow.run,
+        job.id,
+        dto,
     )
 
+    return JobCreatedResponseDTO(
+        job_id=job.id
+    )
 
 @router.get(
     "/containers",

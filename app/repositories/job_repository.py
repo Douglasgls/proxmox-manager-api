@@ -23,7 +23,12 @@ class JobRepository(
             self.db
             .query(Job)
             .filter(
-                Job.status == "running"
+                Job.status.in_(
+                    [
+                        "RUNNING",
+                        "running",
+                    ]
+                )
             )
             .all()
         )
@@ -35,7 +40,12 @@ class JobRepository(
             self.db
             .query(Job)
             .filter(
-                Job.status == "pending"
+                Job.status.in_(
+                    [
+                        "PENDING",
+                        "pending",
+                    ]
+                )
             )
             .all()
         )

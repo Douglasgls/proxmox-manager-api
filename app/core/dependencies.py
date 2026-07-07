@@ -37,6 +37,10 @@ from app.services.container_service import (
     ContainerService
 )
 
+from app.services.container_creation_workflow import (
+    ContainerCreationWorkflow
+)
+
 from app.services.job_service import (
     JobService
 )
@@ -101,6 +105,17 @@ def get_job_service(db=Depends(get_db)):
 
     return JobService(
         JobRepository(db)
+    )
+
+
+def get_container_creation_workflow(
+    container_service=Depends(get_container_service),
+    job_service=Depends(get_job_service),
+):
+
+    return ContainerCreationWorkflow(
+        container_service=container_service,
+        job_service=job_service,
     )
 
 
