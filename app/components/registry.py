@@ -3,6 +3,8 @@ from app.components.curl_component import CurlComponent
 from app.components.definition import ComponentDefinition
 from app.components.dummy_component import DummyComponent
 from app.components.EchoComponent import EchoComponent
+from app.components.git_component import GitComponent
+from app.components.tailscale_component import TailscaleComponent
 
 
 class ComponentRegistry:
@@ -11,6 +13,8 @@ class ComponentRegistry:
         "dummy": DummyComponent,
         "echo": EchoComponent,
         "curl": CurlComponent,
+        "git": GitComponent,
+        "tailscale": TailscaleComponent,
     }
 
     @classmethod
