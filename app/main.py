@@ -12,6 +12,7 @@ from app.api.containers import router as containers
 from app.api.jobs import router as jobs
 from app.api.templates import router as templates
 from app.api.health import router as health
+from app.api.monitoring import router as monitoring
 from app.core.exceptions import DomainValidationError
 
 
@@ -63,4 +64,9 @@ app.include_router(
 app.include_router(
     tags=["health"],
     router=health
+)
+
+app.include_router(
+    tags=["monitoring"],
+    router=monitoring
 )

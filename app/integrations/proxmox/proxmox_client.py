@@ -508,6 +508,84 @@ class ProxmoxClient:
                 "Could not get Proxmox version"
             ) from exc
 
+    def get_node_status(self) -> dict[str, Any]:
+        """Return the current node status directly from the Proxmox API."""
+        try:
+            return self._node_api().status.get()
+        except ResourceException as exc:
+            raise self._api_error(exc) from exc
+        except Exception as exc:
+            raise ProxmoxConnectionError(
+                "Could not get Proxmox node status"
+            ) from exc
+
+    def list_container_runtime_data(self) -> list[dict[str, Any]]:
+        """Return the live LXC summary supplied by Proxmox for this node."""
+        try:
+            return self._node_api().lxc.get()
+        except ResourceException as exc:
+            raise self._api_error(exc) from exc
+        except Exception as exc:
+            raise ProxmoxConnectionError(
+                "Could not list Proxmox container runtime data"
+            ) from exc
+
+    def get_container_runtime_data(
+        self,
+        container_id: int,
+    ) -> dict[str, Any]:
+        """Return the current runtime data for one LXC container."""
+        try:
+            return self._lxc_api(container_id).status.current.get()
+        except ResourceException as exc:
+            if self._is_not_found(exc):
+                raise ContainerNotFoundError(
+                    f"Container {container_id} not found"
+                ) from exc
+            raise self._api_error(exc) from exc
+        except Exception as exc:
+            raise ProxmoxConnectionError(
+                "Could not get Proxmox container runtime data"
+            ) from exc
+
+    def list_storage_content(
+        self,
+        content: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """List content from every storage configured on the selected node."""
+        items: list[dict[str, Any]] = []
+
+        try:
+            for storage in self.list_storage():
+                storage_name = storage.get("storage")
+                if not storage_name:
+                    continue
+
+                params = {"content": content} if content else {}
+                items.extend(
+                    self._node_api().storage(storage_name).content.get(
+                        **params
+                    )
+                )
+            return items
+        except ResourceException as exc:
+            raise self._api_error(exc) from exc
+        except Exception as exc:
+            raise ProxmoxConnectionError(
+                "Could not list Proxmox storage content"
+            ) from exc
+
+    def list_network_interfaces(self) -> list[dict[str, Any]]:
+        """List all node network interfaces, including bridges."""
+        try:
+            return self._node_api().network.get()
+        except ResourceException as exc:
+            raise self._api_error(exc) from exc
+        except Exception as exc:
+            raise ProxmoxConnectionError(
+                "Could not list Proxmox network interfaces"
+            ) from exc
+
     def exec(
         self,
         container_id: int,
