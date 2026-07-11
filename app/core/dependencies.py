@@ -1,4 +1,5 @@
 from fastapi import Depends
+from functools import lru_cache
 
 from app.database.session import SessionLocal
 
@@ -56,6 +57,10 @@ from app.services.template_service import (
 from app.services.audit_log_service import (
     AuditLogService
 )
+from app.core.settings import Settings
+from app.security.jwt import JWTManager
+from app.security.password import PasswordManager
+from app.services.auth_service import AuthService
 from app.monitoring.inventory.container_inventory_collector import (
     ContainerInventoryCollector,
 )
@@ -102,6 +107,34 @@ def get_db():
 def get_proxmox_client():
 
     return ProxmoxClient()
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings.from_environment()
+
+
+@lru_cache
+def get_password_manager() -> PasswordManager:
+    return PasswordManager()
+
+
+def get_jwt_manager(
+    settings: Settings = Depends(get_settings),
+) -> JWTManager:
+    return JWTManager(settings)
+
+
+def get_auth_service(
+    db=Depends(get_db),
+    password_manager: PasswordManager = Depends(get_password_manager),
+    jwt_manager: JWTManager = Depends(get_jwt_manager),
+):
+    return AuthService(
+        user_service=UserService(UserRepository(db)),
+        password_manager=password_manager,
+        jwt_manager=jwt_manager,
+    )
 
 
 def get_host_monitoring_service(

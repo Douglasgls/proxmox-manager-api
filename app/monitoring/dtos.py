@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-
+# TODO:Lembrar de mover esse DTO para a pasta DTOs
 class HostInventoryDTO(BaseModel):
     hostname: str
     proxmox_version: str | None = None

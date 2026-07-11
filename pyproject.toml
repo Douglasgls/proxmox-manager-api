@@ -10,6 +10,8 @@ dependencies = [
     "proxmoxer>=2.3.0",
     "psycopg[binary]>=3.3.4",
     "python-dotenv>=1.2.2",
+    "PyJWT>=2.10.1",
+    "pwdlib[bcrypt]>=0.3.0",
     "requests>=2.34.2",
     "sqlalchemy>=2.0.51",
 ]

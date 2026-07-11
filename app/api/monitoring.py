@@ -19,9 +19,13 @@ from app.monitoring.services.container_monitoring_service import ContainerMonito
 from app.monitoring.services.host_monitoring_service import HostMonitoringService
 from app.monitoring.services.network_monitoring_service import NetworkMonitoringService
 from app.monitoring.services.storage_monitoring_service import StorageMonitoringService
+from app.security.dependencies import get_current_user
 
 
-router = APIRouter(prefix="/monitor")
+router = APIRouter(
+    prefix="/monitor",
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/host/inventory", response_model=HostInventoryDTO)

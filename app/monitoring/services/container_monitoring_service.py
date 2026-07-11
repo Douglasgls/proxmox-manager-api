@@ -6,7 +6,7 @@ from app.monitoring.dtos import (
 from app.monitoring.inventory.container_inventory_collector import ContainerInventoryCollector
 from app.monitoring.metrics.container_metrics_collector import ContainerMetricsCollector
 
-
+# TODO: Lembrar de alterar esses arquivos para a pasta service geral depois 
 class ContainerMonitoringService:
     def __init__(
         self,

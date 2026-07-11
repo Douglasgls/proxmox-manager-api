@@ -4,27 +4,26 @@ from fastapi import Depends
 from app.dto.request.create_user import (
     CreateUserDTO
 )
+from app.dto.response.user import AuthenticatedUserDTO
 
 from app.core.dependencies import (
-    get_user_service
+    get_auth_service,
 )
-from app.services.user_service import UserService
+from app.services.auth_service import AuthService
 
 
 router = APIRouter()
 
 
-@router.post("/users")
+@router.post("/users", response_model=AuthenticatedUserDTO)
 def create(
     dto: CreateUserDTO,
-    service: UserService = Depends(
-        get_user_service
+    service: AuthService = Depends(
+        get_auth_service
     )
 ):
 
-    # TODO: Implementar validação de email e senha e
-    #  desestruturar o dto sem precisar passar cada campo individualmente.
-    return service.create(
+    return service.create_user(
         username=dto.username,
         password=dto.password,
         email=dto.email,

@@ -24,9 +24,10 @@ from app.core.dependencies import (
 from app.dto.response.job import JobCreatedResponseDTO
 from app.services.container_creation_workflow import ContainerCreationWorkflow
 from app.services.container_service import ContainerService
+from app.security.dependencies import get_current_user
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.post(

@@ -17,9 +17,9 @@ class UserService:
     def create(
         self,
         username: str,
-        password: str,
+        password_hash: str,
         role: str = "admin",
-        email: str = None
+        email: str | None = None,
     ):
 
         existing = (
@@ -34,9 +34,14 @@ class UserService:
                 "Usuário já existe"
             )
 
+        if email and self.repository.get_by_email(email):
+            raise ValueError(
+                "Email já está em uso"
+            )
+
         user = User(
             username=username,
-            password=password,
+            password_hash=password_hash,
             email=email,
             role=role
         )
@@ -56,3 +61,10 @@ class UserService:
             self.repository
             .get(user_id)
         )
+
+
+    def get_by_email(
+        self,
+        email: str,
+    ):
+        return self.repository.get_by_email(email)

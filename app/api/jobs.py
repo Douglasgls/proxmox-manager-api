@@ -13,6 +13,7 @@ from app.services.job_service import (
     JobService,
 )
 from app.services.job_events import job_event_manager
+from app.security.dependencies import get_current_user
 
 
 router = APIRouter()
@@ -21,6 +22,7 @@ router = APIRouter()
 @router.get(
     "/jobs",
     response_model=list[JobResponseDTO],
+    dependencies=[Depends(get_current_user)],
 )
 def list_all(
     service: JobService = Depends(
@@ -34,6 +36,7 @@ def list_all(
 @router.get(
     "/jobs/{job_id}",
     response_model=JobResponseDTO,
+    dependencies=[Depends(get_current_user)],
 )
 def get(
     job_id: str,

@@ -26,7 +26,11 @@ class User(Base):
         unique=True
     )
 
-    password: Mapped[str]
+    password_hash: Mapped[str]
+
+    is_active: Mapped[bool] = mapped_column(
+        default=True
+    )
 
     role: Mapped[str] = mapped_column(
         String(20),
@@ -35,4 +39,9 @@ class User(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         default=datetime.utcnow
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
     )
