@@ -3,6 +3,8 @@
 # from app.api.container_actions import router as actions
 
 
+from contextlib import asynccontextmanager
+import asyncio
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -14,10 +16,24 @@ from app.api.jobs import router as jobs
 from app.api.templates import router as templates
 from app.api.health import router as health
 from app.api.monitoring import router as monitoring
+from app.api.websocket import router as websocket
 from app.core.exceptions import AuthenticationError, DomainValidationError
+from app.monitoring.metrics_collector import metrics_collector
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(metrics_collector.start())
+    yield
+    await metrics_collector.stop()
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.exception_handler(DomainValidationError)
@@ -88,3 +104,8 @@ app.include_router(
     tags=["monitoring"],
     router=monitoring
 )
+
+app.include_router(
+    websocket
+)
+

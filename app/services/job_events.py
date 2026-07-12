@@ -1,34 +1,24 @@
 import asyncio
-from collections import defaultdict
-from copy import copy
-from dataclasses import dataclass
 from typing import Any
+from app.core.event_bus import event_bus, QueueSubscriber
 
-
-@dataclass
 class JobSubscriber:
-    queue: asyncio.Queue
-    loop: asyncio.AbstractEventLoop
-
+    def __init__(self, queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
+        self.queue = queue
+        self.loop = loop
 
 class JobEventManager:
-
-    def __init__(
-        self,
-    ):
-        self._subscribers: dict[str, list[JobSubscriber]] = defaultdict(list)
-
     async def subscribe(
         self,
         job_id: str,
     ) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue()
-        self._subscribers[job_id].append(
-            JobSubscriber(
-                queue=queue,
-                loop=asyncio.get_running_loop(),
-            )
+        subscriber = QueueSubscriber(
+            queue=queue,
+            loop=asyncio.get_running_loop(),
         )
+        setattr(queue, "_subscriber_ref", subscriber)
+        event_bus.register(f"jobs:{job_id}", subscriber)
         return queue
 
     def unsubscribe(
@@ -36,43 +26,24 @@ class JobEventManager:
         job_id: str,
         queue: asyncio.Queue,
     ):
-        subscribers = self._subscribers.get(
-            job_id,
-            []
-        )
-
-        for subscriber in copy(subscribers):
-            if subscriber.queue == queue:
-                subscribers.remove(
-                    subscriber
-                )
-                break
-
-        if not subscribers and job_id in self._subscribers:
-            del self._subscribers[job_id]
+        subscriber = getattr(queue, "_subscriber_ref", None)
+        if subscriber:
+            event_bus.unregister(f"jobs:{job_id}", subscriber)
 
     def publish(
         self,
         job_id: str,
         event: dict[str, Any],
     ):
-        subscribers = copy(
-            self._subscribers.get(
-                job_id,
-                []
-            )
-        )
-
-        for queue in subscribers:
-            if queue.loop.is_running():
-                queue.loop.call_soon_threadsafe(
-                    queue.queue.put_nowait,
-                    event,
-                )
-            else:
-                queue.queue.put_nowait(
-                    event
-                )
-
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # Publish to specific job channel for old /jobs/{job_id}/stream
+                asyncio.create_task(event_bus.publish(f"jobs:{job_id}", event))
+                # Also publish to the general "jobs" channel for the new /ws channel
+                asyncio.create_task(event_bus.publish("jobs", event))
+        except RuntimeError:
+            pass
 
 job_event_manager = JobEventManager()
+
