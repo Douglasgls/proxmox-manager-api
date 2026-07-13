@@ -21,6 +21,7 @@ from app.integrations.proxmox import (
     ContainerInfo,
     ProxmoxClient,
     ContainerSession,
+    ContainerStatus,
 )
 from app.provision.engine import ProvisionEngine
 from app.provision.plan import ProvisionPlan
@@ -168,12 +169,10 @@ class ContainerService:
             name=name,
             cpu=cpu,
             memory_mb=memory_mb,
-            status=status,
             disk_gb=(
                 proxmox_container.disk_gb
                 or 2
             ),
-            ip_address=proxmox_container.ip_address,
             image_name=proxmox_container.image_name,
             password=password,
             created_by="fe82e4f9-b04e-4946-93bc-d1145f313eb1",
@@ -189,6 +188,9 @@ class ContainerService:
                 container
             )
         )
+
+        created_container = self._sync_container_runtime(created_container)
+
         self._notify_lifecycle(
             lifecycle,
             "container_persisted",
@@ -276,6 +278,11 @@ class ContainerService:
             container_id
         )
 
+        try:
+            container = self._sync_container_runtime(container)
+        except Exception as e:
+            logger.warning(f"Initial sync failed in start operation: {e}")
+
         if (
             container.status
             ==
@@ -292,18 +299,28 @@ class ContainerService:
             )
         )
 
-        self._apply_operation_result(
-            container=container,
-            status=operation.status or "running",
-            ip_address=operation.ip_address,
-        )
+        # Aguardar finalizar
+        max_attempts = 30
+        for _ in range(max_attempts):
+            try:
+                status_info = self.proxmox_client.get_container_status(
+                    container.container_number
+                )
+                if status_info.status == "running":
+                    break
+            except Exception as e:
+                logger.warning(f"Error checking status during start wait loop: {e}")
+            time.sleep(1)
 
-        updated_container = (
-            self.repository
-            .update(
-                container
-            )
-        )
+        try:
+            updated_container = self._sync_container_runtime(container)
+        except Exception as e:
+            logger.warning(f"Final sync failed in start operation: {e}")
+            container.status = "running"
+            container.updated_at = datetime.now()
+            updated_container = self.repository.update(container)
+
+        logger.info("Container started.")
 
         self._log_action(
             action="start",
@@ -331,7 +348,10 @@ class ContainerService:
             container_id
         )
 
-        # TODO: retornar um json com a mensagem de erro, ao invés de lançar uma exceção. Isso facilitaria o tratamento do erro no front-end.
+        try:
+            container = self._sync_container_runtime(container)
+        except Exception as e:
+            logger.warning(f"Initial sync failed in stop operation: {e}")
 
         if (
             container.status
@@ -349,18 +369,28 @@ class ContainerService:
             )
         )
 
-        self._apply_operation_result(
-            container=container,
-            status=operation.status or "stopped",
-            ip_address=operation.ip_address,
-        )
+        # Aguardar finalizar
+        max_attempts = 30
+        for _ in range(max_attempts):
+            try:
+                status_info = self.proxmox_client.get_container_status(
+                    container.container_number
+                )
+                if status_info.status == "stopped":
+                    break
+            except Exception as e:
+                logger.warning(f"Error checking status during stop wait loop: {e}")
+            time.sleep(1)
 
-        updated_container = (
-            self.repository
-            .update(
-                container
-            )
-        )
+        try:
+            updated_container = self._sync_container_runtime(container)
+        except Exception as e:
+            logger.warning(f"Final sync failed in stop operation: {e}")
+            container.status = "stopped"
+            container.updated_at = datetime.now()
+            updated_container = self.repository.update(container)
+
+        logger.info("Container stopped.")
 
         self._log_action(
             action="stop",
@@ -388,6 +418,11 @@ class ContainerService:
             container_id
         )
 
+        try:
+            container = self._sync_container_runtime(container)
+        except Exception as e:
+            logger.warning(f"Initial sync failed in restart operation: {e}")
+
         operation = (
             self.proxmox_client
             .restart_container(
@@ -395,18 +430,26 @@ class ContainerService:
             )
         )
 
-        self._apply_operation_result(
-            container=container,
-            status=operation.status or "running",
-            ip_address=operation.ip_address,
-        )
+        # Aguardar finalizar
+        max_attempts = 30
+        for _ in range(max_attempts):
+            try:
+                status_info = self.proxmox_client.get_container_status(
+                    container.container_number
+                )
+                if status_info.status == "running":
+                    break
+            except Exception as e:
+                logger.warning(f"Error checking status during restart wait loop: {e}")
+            time.sleep(1)
 
-        updated_container = (
-            self.repository
-            .update(
-                container
-            )
-        )
+        try:
+            updated_container = self._sync_container_runtime(container)
+        except Exception as e:
+            logger.warning(f"Final sync failed in restart operation: {e}")
+            container.status = "running"
+            container.updated_at = datetime.now()
+            updated_container = self.repository.update(container)
 
         self._log_action(
             action="restart",
@@ -433,6 +476,11 @@ class ContainerService:
         container = self._get_container_or_fail(
             container_id
         )
+
+        try:
+            container = self._sync_container_runtime(container)
+        except Exception as e:
+            logger.warning(f"Initial sync failed in delete operation: {e}")
 
         operation = (
             self.proxmox_client
@@ -472,6 +520,7 @@ class ContainerService:
         )
 
 
+
     def get_status(
         self,
         container_id
@@ -488,10 +537,12 @@ class ContainerService:
             )
         )
 
+        self._sync_container_runtime(container, status_info=proxmox_status)
+
         return ContainerStatusDTO(
             container_id=container.id,
             container_number=container.container_number,
-            status=container.status,
+            status=proxmox_status.status,
             proxmox_status=proxmox_status.status,
             uptime_seconds=proxmox_status.uptime_seconds,
             cpu_usage_percent=proxmox_status.cpu_usage_percent,
@@ -509,24 +560,7 @@ class ContainerService:
             container_id
         )
 
-        proxmox_container = (
-            self.proxmox_client
-            .get_container(
-                container.container_number
-            )
-        )
-
-        self._apply_container_info(
-            container=container,
-            proxmox_container=proxmox_container,
-        )
-
-        updated_container = (
-            self.repository
-            .update(
-                container
-            )
-        )
+        updated_container = self._sync_container_runtime(container)
 
         self._log_action(
             action="sync",
@@ -624,6 +658,27 @@ class ContainerService:
 
 # Private
 # TODO: Todas as validações precisam ser refatoradas para validar tudo de uma vez só, ao invés de validar campo por campo. 
+
+    def _sync_container_runtime(
+        self,
+        container: Container,
+        status_info: ContainerStatus | None = None,
+    ) -> Container:
+        logger.info("Synchronizing runtime state...")
+        if status_info is None:
+            status_info = self.proxmox_client.get_container_status(
+                container.container_number
+            )
+        logger.info(f"Runtime status: {status_info.status}")
+
+        container.status = status_info.status
+        if status_info.ip_address:
+            container.ip_address = status_info.ip_address
+        container.updated_at = datetime.now()
+
+        updated_container = self.repository.update(container)
+        logger.info("Runtime synchronized.")
+        return updated_container
 
     def _get_container_or_fail(
         self,

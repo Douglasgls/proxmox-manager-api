@@ -19,6 +19,7 @@ from app.api.monitoring import router as monitoring
 from app.api.websocket import router as websocket
 from app.core.exceptions import AuthenticationError, DomainValidationError
 from app.monitoring.metrics_collector import metrics_collector
+from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager
@@ -35,6 +36,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.exception_handler(DomainValidationError)
 def domain_validation_error_handler(

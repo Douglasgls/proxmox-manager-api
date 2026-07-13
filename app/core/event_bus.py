@@ -32,6 +32,16 @@ class EventBus:
         # Maps channel name (str) to a set of Subscriber objects
         self._channels: Dict[str, Set[Subscriber]] = {}
 
+    def subscriber_count(self, channel: str) -> int:
+        return len(self._channels.get(channel, set()))
+
+    def has_subscribers(self, channel: str) -> bool:
+        return len(self._channels.get(channel, set())) > 0
+
+    def list_channels(self) -> list[str]:
+        return list(self._channels.keys())
+
+
     def register(self, channel: str, subscriber: Subscriber):
         if channel not in self._channels:
             self._channels[channel] = set()

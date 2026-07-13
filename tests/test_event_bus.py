@@ -52,3 +52,40 @@ class EventBusTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sub1.received_messages[1], {"message": "hello all"})
         self.assertEqual(len(sub2.received_messages), 1)
         self.assertEqual(sub2.received_messages[0], {"message": "hello all"})
+
+    def test_new_event_bus_methods(self):
+        bus = EventBus()
+        sub1 = MockSubscriber()
+        sub2 = MockSubscriber()
+
+        # Initial state
+        self.assertEqual(bus.subscriber_count("test_channel"), 0)
+        self.assertFalse(bus.has_subscribers("test_channel"))
+        self.assertEqual(bus.list_channels(), [])
+
+        # After registering one subscriber
+        bus.register("test_channel", sub1)
+        self.assertEqual(bus.subscriber_count("test_channel"), 1)
+        self.assertTrue(bus.has_subscribers("test_channel"))
+        self.assertEqual(bus.list_channels(), ["test_channel"])
+
+        # After registering another subscriber
+        bus.register("test_channel", sub2)
+        self.assertEqual(bus.subscriber_count("test_channel"), 2)
+        self.assertTrue(bus.has_subscribers("test_channel"))
+        self.assertEqual(bus.list_channels(), ["test_channel"])
+
+        # After registering on a different channel
+        bus.register("another_channel", sub1)
+        self.assertEqual(bus.subscriber_count("another_channel"), 1)
+        self.assertTrue(bus.has_subscribers("another_channel"))
+        self.assertEqual(set(bus.list_channels()), {"test_channel", "another_channel"})
+
+        # After unregistering
+        bus.unregister("test_channel", sub1)
+        self.assertEqual(bus.subscriber_count("test_channel"), 1)
+        
+        bus.unregister("test_channel", sub2)
+        self.assertEqual(bus.subscriber_count("test_channel"), 0)
+        self.assertFalse(bus.has_subscribers("test_channel"))
+        self.assertEqual(bus.list_channels(), ["another_channel"])

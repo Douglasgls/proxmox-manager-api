@@ -616,9 +616,15 @@ class ProxmoxClient:
             if deleted:
                 status = "deleted"
             elif read_status_after:
-                current_status = self.get_container_status(container_id)
-                status = current_status.status
-                ip_address = current_status.ip_address
+                try:
+                    current_status = self.get_container_status(container_id)
+                    status = current_status.status
+                    ip_address = current_status.ip_address
+                except Exception as status_exc:
+                    logger.warning(
+                        f"Could not read status immediately after {operation} operation: {status_exc}"
+                    )
+                    status = "running" if operation in ("start", "restart") else "stopped"
 
             return OperationResult(
                 container_id=container_id,
