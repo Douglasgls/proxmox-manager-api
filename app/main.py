@@ -17,6 +17,7 @@ from app.api.templates import router as templates
 from app.api.health import router as health
 from app.api.monitoring import router as monitoring
 from app.api.websocket import router as websocket
+from app.console.websocket_console import router as console_router
 from app.core.exceptions import AuthenticationError, DomainValidationError
 from app.services.monitoring.tasks.adapter import metrics_collector
 from app.services.job_events import job_event_manager
@@ -118,5 +119,9 @@ app.include_router(
 
 app.include_router(
     websocket
+)
+
+app.include_router(
+    console_router
 )
 
