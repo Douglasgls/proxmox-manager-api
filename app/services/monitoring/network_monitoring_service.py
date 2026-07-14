@@ -1,5 +1,5 @@
-from app.monitoring.dtos import NetworkInventoryDTO
-from app.monitoring.inventory.network_inventory_collector import NetworkInventoryCollector
+from app.dto.response.monitoring import NetworkInventoryDTO
+from app.services.monitoring.collectors.inventory.network_inventory_collector import NetworkInventoryCollector
 
 
 class NetworkMonitoringService:

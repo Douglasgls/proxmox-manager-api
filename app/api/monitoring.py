@@ -6,7 +6,7 @@ from app.core.dependencies import (
     get_network_monitoring_service,
     get_storage_monitoring_service,
 )
-from app.monitoring.dtos import (
+from app.dto.response.monitoring import (
     ContainerInventoryDTO,
     ContainerInventorySummaryDTO,
     ContainerMetricsDTO,
@@ -15,10 +15,10 @@ from app.monitoring.dtos import (
     NetworkInventoryDTO,
     StorageInventoryDTO,
 )
-from app.monitoring.services.container_monitoring_service import ContainerMonitoringService
-from app.monitoring.services.host_monitoring_service import HostMonitoringService
-from app.monitoring.services.network_monitoring_service import NetworkMonitoringService
-from app.monitoring.services.storage_monitoring_service import StorageMonitoringService
+from app.services.monitoring.container_monitoring_service import ContainerMonitoringService
+from app.services.monitoring.host_monitoring_service import HostMonitoringService
+from app.services.monitoring.network_monitoring_service import NetworkMonitoringService
+from app.services.monitoring.storage_monitoring_service import StorageMonitoringService
 from app.security.dependencies import get_current_user
 
 

@@ -1,6 +1,6 @@
-from app.monitoring.dtos import HostInventoryDTO, HostMetricsDTO
-from app.monitoring.inventory.host_inventory_collector import HostInventoryCollector
-from app.monitoring.metrics.host_metrics_collector import HostMetricsCollector
+from app.dto.response.monitoring import HostInventoryDTO, HostMetricsDTO
+from app.services.monitoring.collectors.inventory.host_inventory_collector import HostInventoryCollector
+from app.services.monitoring.collectors.metrics.host_metrics_collector import HostMetricsCollector
 
 
 class HostMonitoringService:

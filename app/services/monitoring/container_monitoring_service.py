@@ -1,10 +1,10 @@
-from app.monitoring.dtos import (
+from app.dto.response.monitoring import (
     ContainerInventoryDTO,
     ContainerInventorySummaryDTO,
     ContainerMetricsDTO,
 )
-from app.monitoring.inventory.container_inventory_collector import ContainerInventoryCollector
-from app.monitoring.metrics.container_metrics_collector import ContainerMetricsCollector
+from app.services.monitoring.collectors.inventory.container_inventory_collector import ContainerInventoryCollector
+from app.services.monitoring.collectors.metrics.container_metrics_collector import ContainerMetricsCollector
 
 # TODO: Lembrar de alterar esses arquivos para a pasta service geral depois 
 class ContainerMonitoringService:

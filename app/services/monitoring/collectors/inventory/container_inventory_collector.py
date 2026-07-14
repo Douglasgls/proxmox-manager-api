@@ -1,5 +1,5 @@
 from app.integrations.proxmox import ContainerNotFoundError, ProxmoxClient
-from app.monitoring.dtos import ContainerInventoryDTO, ContainerInventorySummaryDTO
+from app.dto.response.monitoring import ContainerInventoryDTO, ContainerInventorySummaryDTO
 
 
 class ContainerInventoryCollector:

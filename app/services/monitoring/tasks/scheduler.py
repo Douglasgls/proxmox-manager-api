@@ -4,7 +4,7 @@ import re
 from typing import Dict
 
 from app.core.event_bus import event_bus
-from app.monitoring.publisher import MonitoringPublisher
+from app.services.monitoring.tasks.publisher import MonitoringPublisher
 
 logger = logging.getLogger(__name__)
 

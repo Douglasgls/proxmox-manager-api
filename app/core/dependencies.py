@@ -61,34 +61,34 @@ from app.core.settings import Settings
 from app.security.jwt import JWTManager
 from app.security.password import PasswordManager
 from app.services.auth_service import AuthService
-from app.monitoring.inventory.container_inventory_collector import (
+from app.services.monitoring.collectors.inventory.container_inventory_collector import (
     ContainerInventoryCollector,
 )
-from app.monitoring.inventory.host_inventory_collector import (
+from app.services.monitoring.collectors.inventory.host_inventory_collector import (
     HostInventoryCollector,
 )
-from app.monitoring.inventory.network_inventory_collector import (
+from app.services.monitoring.collectors.inventory.network_inventory_collector import (
     NetworkInventoryCollector,
 )
-from app.monitoring.inventory.storage_inventory_collector import (
+from app.services.monitoring.collectors.inventory.storage_inventory_collector import (
     StorageInventoryCollector,
 )
-from app.monitoring.metrics.container_metrics_collector import (
+from app.services.monitoring.collectors.metrics.container_metrics_collector import (
     ContainerMetricsCollector,
 )
-from app.monitoring.metrics.host_metrics_collector import (
+from app.services.monitoring.collectors.metrics.host_metrics_collector import (
     HostMetricsCollector,
 )
-from app.monitoring.services.container_monitoring_service import (
+from app.services.monitoring.container_monitoring_service import (
     ContainerMonitoringService,
 )
-from app.monitoring.services.host_monitoring_service import (
+from app.services.monitoring.host_monitoring_service import (
     HostMonitoringService,
 )
-from app.monitoring.services.network_monitoring_service import (
+from app.services.monitoring.network_monitoring_service import (
     NetworkMonitoringService,
 )
-from app.monitoring.services.storage_monitoring_service import (
+from app.services.monitoring.storage_monitoring_service import (
     StorageMonitoringService,
 )
 

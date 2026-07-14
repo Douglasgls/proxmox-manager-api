@@ -18,12 +18,15 @@ from app.api.health import router as health
 from app.api.monitoring import router as monitoring
 from app.api.websocket import router as websocket
 from app.core.exceptions import AuthenticationError, DomainValidationError
-from app.monitoring.metrics_collector import metrics_collector
+from app.services.monitoring.tasks.adapter import metrics_collector
+from app.services.job_events import job_event_manager
 from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    job_event_manager.loop = asyncio.get_running_loop()
+    print(f"[Lifespan DEBUG] Registrou o event loop principal no job_event_manager: {job_event_manager.loop}")
     task = asyncio.create_task(metrics_collector.start())
     yield
     await metrics_collector.stop()

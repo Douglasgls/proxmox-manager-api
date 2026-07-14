@@ -1,5 +1,5 @@
-from app.monitoring.dtos import StorageInventoryDTO
-from app.monitoring.inventory.storage_inventory_collector import StorageInventoryCollector
+from app.dto.response.monitoring import StorageInventoryDTO
+from app.services.monitoring.collectors.inventory.storage_inventory_collector import StorageInventoryCollector
 
 
 class StorageMonitoringService:

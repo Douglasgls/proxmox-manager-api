@@ -1,5 +1,5 @@
 from app.integrations.proxmox import ProxmoxClient
-from app.monitoring.dtos import HostMetricsDTO
+from app.dto.response.monitoring import HostMetricsDTO
 
 
 class HostMetricsCollector:

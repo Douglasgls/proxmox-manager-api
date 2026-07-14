@@ -1,5 +1,5 @@
 from app.integrations.proxmox import ProxmoxClient
-from app.monitoring.dtos import ContainerMetricsDTO
+from app.dto.response.monitoring import ContainerMetricsDTO
 
 
 class ContainerMetricsCollector:

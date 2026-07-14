@@ -1,5 +1,5 @@
 from app.integrations.proxmox import ProxmoxClient
-from app.monitoring.dtos import StorageInventoryDTO
+from app.dto.response.monitoring import StorageInventoryDTO
 
 
 class StorageInventoryCollector:

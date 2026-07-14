@@ -1,5 +1,5 @@
 from app.integrations.proxmox import ProxmoxClient
-from app.monitoring.dtos import HostInventoryDTO
+from app.dto.response.monitoring import HostInventoryDTO
 
 
 class HostInventoryCollector:

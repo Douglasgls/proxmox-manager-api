@@ -229,7 +229,6 @@ class JobService:
             job.id,
             payload,
         )
-
     def build_event_payload(
         self,
         job: Job,
@@ -239,12 +238,14 @@ class JobService:
         return {
             "event": event,
             "job_id": job.id,
+            "type": job.type,
             "status": job.status,
             "progress": job.progress,
             "current_step": job.current_step,
             "current_component": job.current_component,
             "container_id": job.container_id,
             "target_container": job.target_container,
+            "output": job.output,
             "error": job.error,
             "started_at": (
                 job.started_at.isoformat()
@@ -254,6 +255,11 @@ class JobService:
             "finished_at": (
                 job.finished_at.isoformat()
                 if job.finished_at
+                else None
+            ),
+            "created_at": (
+                job.created_at.isoformat()
+                if job.created_at
                 else None
             ),
         }

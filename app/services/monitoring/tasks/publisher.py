@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import Optional
 
 from app.core.event_bus import event_bus
-from app.monitoring.services.container_monitoring_service import ContainerMonitoringService
-from app.monitoring.services.host_monitoring_service import HostMonitoringService
+from app.services.monitoring.container_monitoring_service import ContainerMonitoringService
+from app.services.monitoring.host_monitoring_service import HostMonitoringService
 
 logger = logging.getLogger(__name__)
 

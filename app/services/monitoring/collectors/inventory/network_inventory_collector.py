@@ -1,5 +1,5 @@
 from app.integrations.proxmox import ProxmoxClient
-from app.monitoring.dtos import NetworkInterfaceDTO, NetworkInventoryDTO
+from app.dto.response.monitoring import NetworkInterfaceDTO, NetworkInventoryDTO
 
 
 class NetworkInventoryCollector:

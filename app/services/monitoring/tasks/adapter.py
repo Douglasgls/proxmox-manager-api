@@ -1,13 +1,13 @@
 import logging
 from app.core.dependencies import get_proxmox_client
-from app.monitoring.services.host_monitoring_service import HostMonitoringService
-from app.monitoring.services.container_monitoring_service import ContainerMonitoringService
-from app.monitoring.inventory.host_inventory_collector import HostInventoryCollector
-from app.monitoring.metrics.host_metrics_collector import HostMetricsCollector
-from app.monitoring.inventory.container_inventory_collector import ContainerInventoryCollector
-from app.monitoring.metrics.container_metrics_collector import ContainerMetricsCollector
-from app.monitoring.publisher import MonitoringPublisher
-from app.monitoring.scheduler import MonitoringScheduler
+from app.services.monitoring.host_monitoring_service import HostMonitoringService
+from app.services.monitoring.container_monitoring_service import ContainerMonitoringService
+from app.services.monitoring.collectors.inventory.host_inventory_collector import HostInventoryCollector
+from app.services.monitoring.collectors.metrics.host_metrics_collector import HostMetricsCollector
+from app.services.monitoring.collectors.inventory.container_inventory_collector import ContainerInventoryCollector
+from app.services.monitoring.collectors.metrics.container_metrics_collector import ContainerMetricsCollector
+from app.services.monitoring.tasks.publisher import MonitoringPublisher
+from app.services.monitoring.tasks.scheduler import MonitoringScheduler
 
 logger = logging.getLogger(__name__)
 
