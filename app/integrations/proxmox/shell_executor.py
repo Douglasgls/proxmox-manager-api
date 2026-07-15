@@ -17,6 +17,15 @@ class ShellExecutor:
         command: list[str],
         timeout: int | None = None,
     ) -> ShellResult:
+        import os
+        env = os.environ.copy()
+        env["LC_ALL"] = "C.UTF-8"
+        env["LANG"] = "C.UTF-8"
+        # Clean other locale variables to prevent warnings from tools like perl/apt/etc.
+        for key in list(env.keys()):
+            if key.startswith("LC_") and key != "LC_ALL":
+                del env[key]
+
         try:
             completed = subprocess.run(
                 command,
@@ -24,6 +33,7 @@ class ShellExecutor:
                 check=False,
                 text=True,
                 timeout=timeout or self.timeout,
+                env=env,
             )
         except subprocess.TimeoutExpired as exc:
             raise ShellExecutionError(

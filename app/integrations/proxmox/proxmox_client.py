@@ -826,6 +826,13 @@ class ProxmoxClient:
     def _first_storage_id(self) -> str:
         storages = self.list_storage()
 
+        # Prioritize storages supporting container rootdirs
+        for storage in storages:
+            storage_id = storage.get("storage")
+            if storage_id and self._storage_supports_containers(storage):
+                return storage_id
+
+        # Fallback to the first storage ID if none explicitly say they support rootdir
         for storage in storages:
             storage_id = storage.get("storage")
             if storage_id:
@@ -854,6 +861,18 @@ class ProxmoxClient:
             return True
 
         return "vztmpl" in str(content).split(",")
+
+    def _storage_supports_containers(
+        self,
+        storage: dict[str, Any],
+    ) -> bool:
+
+        content = storage.get("content")
+
+        if not content:
+            return True
+
+        return "rootdir" in str(content).split(",")
 
     def _list_installed_templates_by_storage(
         self,

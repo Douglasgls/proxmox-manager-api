@@ -121,5 +121,11 @@ class Container(Base):
 
     jobs = relationship(
         "Job",
-        back_populates="container"
+        back_populates="container",
+        cascade="all, delete-orphan"
+    )
+
+    actions = relationship(
+        "ContainerAction",
+        cascade="all, delete-orphan"
     )

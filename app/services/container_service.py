@@ -73,6 +73,7 @@ class ContainerService:
         provision_plan: ProvisionPlan | None = None,
         lifecycle_callbacks: dict | None = None,
         provision_callbacks: dict | None = None,
+        created_by: str | None = None,
     ):
 
         started_at = perf_counter()
@@ -175,7 +176,7 @@ class ContainerService:
             ),
             image_name=proxmox_container.image_name,
             password=password,
-            created_by="fe82e4f9-b04e-4946-93bc-d1145f313eb1",
+            created_by=created_by,
         )
         self._apply_network_configuration(
             container=container,
@@ -489,34 +490,23 @@ class ContainerService:
             )
         )
 
-        self._apply_operation_result(
-            container=container,
-            status=operation.status or "deleted",
-            ip_address=operation.ip_address,
-        )
-
-        updated_container = (
-            self.repository
-            .update(
-                container
-            )
-        )
+        self.repository.delete(container)
 
         self._log_action(
             action="delete",
-            container=updated_container,
+            container=container,
             started_at=started_at,
             success=operation.success,
             message=operation.message,
         )
 
         return ContainerOperationDTO(
-            container_id=updated_container.id,
-            container_number=updated_container.container_number,
+            container_id=container.id,
+            container_number=container.container_number,
             operation=operation.operation,
             success=operation.success,
             message=operation.message,
-            status=updated_container.status,
+            status="deleted",
         )
 
 

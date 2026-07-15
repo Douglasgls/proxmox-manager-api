@@ -25,6 +25,7 @@ from app.dto.response.job import JobCreatedResponseDTO
 from app.services.container_creation_workflow import ContainerCreationWorkflow
 from app.services.container_service import ContainerService
 from app.security.dependencies import get_current_user
+from app.models.user import User
 
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -38,6 +39,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 def create(
     dto: CreateContainerDTO,
     background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
     workflow: ContainerCreationWorkflow = Depends(
         get_container_creation_workflow
     ),
@@ -49,6 +51,7 @@ def create(
         workflow.run,
         job.id,
         dto,
+        current_user.id,
     )
 
     return JobCreatedResponseDTO(

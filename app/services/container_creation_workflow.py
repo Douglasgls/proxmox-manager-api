@@ -29,6 +29,7 @@ class ContainerCreationWorkflow:
         self,
         job_id: str,
         dto: CreateContainerDTO,
+        created_by: str | None = None,
     ):
 
         try:
@@ -66,6 +67,7 @@ class ContainerCreationWorkflow:
                 provision_plan=plan,
                 lifecycle_callbacks=lifecycle_callbacks,
                 provision_callbacks=callbacks,
+                created_by=created_by,
             )
 
             self.job_service.finish(
@@ -88,7 +90,7 @@ class ContainerCreationWorkflow:
         dto: CreateContainerDTO,
     ) -> ProvisionPlan:
 
-        components = [ComponentDefinition(name="base_system")]
+        components = []
         for component in dto.components:
             components.append(ComponentDefinition(name=component))
 
