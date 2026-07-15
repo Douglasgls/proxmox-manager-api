@@ -88,16 +88,15 @@ class ContainerCreationWorkflow:
         dto: CreateContainerDTO,
     ) -> ProvisionPlan:
 
+        components = [ComponentDefinition(name="base_system")]
+        for component in dto.components:
+            components.append(ComponentDefinition(name=component))
+
         return ProvisionPlan(
             id="default",
             name="Default Provision",
             description="Provisionamento padrão",
-            components=[
-                ComponentDefinition(
-                    name=component
-                )
-                for component in dto.components
-            ],
+            components=components,
         )
 
     def _update_job(

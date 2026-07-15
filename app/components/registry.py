@@ -5,6 +5,7 @@ from app.components.dummy_component import DummyComponent
 from app.components.EchoComponent import EchoComponent
 from app.components.git_component import GitComponent
 from app.components.tailscale_component import TailscaleComponent
+from app.components.base_system_component import BaseSystemComponent
 
 
 class ComponentRegistry:
@@ -15,6 +16,7 @@ class ComponentRegistry:
         "curl": CurlComponent,
         "git": GitComponent,
         "tailscale": TailscaleComponent,
+        "base_system": BaseSystemComponent,
     }
 
     @classmethod

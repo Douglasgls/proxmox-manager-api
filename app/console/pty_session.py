@@ -32,14 +32,21 @@ class PtySession:
         if self.pid == 0:
             # Processo filho
             try:
-                # Configura variáveis básicas de ambiente para emulação de terminal
-                os.environ["TERM"] = "xterm-256color"
-                os.environ["HOME"] = "/root"
-                
-                # Tenta executar com bash; se falhar, executa sh
-                cmd = ["pct", "exec", str(self.container_number), "--", "sh", "-c", 
-                       "if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi"]
-                
+                cmd = [
+                    "pct",
+                    "exec",
+                    str(self.container_number),
+                    "--",
+                    "env",
+                    "TERM=xterm-256color",
+                    "LANG=C.UTF-8",
+                    "LC_ALL=C.UTF-8",
+                    "HOME=/root",
+                    "sh",
+                    "-c",
+                    "if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi"
+                ]
+
                 os.execvp(cmd[0], cmd)
             except Exception:
                 os._exit(1)
