@@ -61,3 +61,9 @@ class TemplateOperationResult(BaseModel):
     storage: str | None = None
     template: str
     task_id: str | None = None
+
+
+class ConfigureVpnResult(BaseModel):
+    changed: bool
+    restarted: bool
+    messages: list[str]

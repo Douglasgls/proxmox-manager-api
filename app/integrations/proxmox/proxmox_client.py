@@ -25,6 +25,7 @@ from app.integrations.proxmox.models import (
     NetworkBridge,
     OperationResult,
     TemplateOperationResult,
+    ConfigureVpnResult,
 )
 from app.integrations.proxmox.network_configuration_formatter import (
     ProxmoxNetworkConfigurationFormatter,
@@ -776,6 +777,111 @@ class ProxmoxClient:
             exit_code=exit_code,
             duration=duration,
             executed_at=executed_at,
+        )
+
+    def configure_container_for_vpn(self, container_id: int) -> ConfigureVpnResult:
+        """
+        Configura um container LXC para suportar VPNs (Tailscale, WireGuard, etc.).
+        Verifica a configuracao, torna a operacao idempotente e reinicia se necessario.
+        """
+        messages = ["Preparing container"]
+        messages.append("Checking LXC configuration")
+
+        conf_path = f"/etc/pve/lxc/{container_id}.conf"
+        
+        # Le o arquivo de configuracao
+        read_result = self.shell_executor.run(["cat", conf_path])
+        lines = read_result.stdout.splitlines()
+        
+        # Requisitos da VPN
+        req_cgroup = "lxc.cgroup2.devices.allow: c 10:200 rwm"
+        req_mount = "lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file"
+        
+        has_cgroup = False
+        has_mount = False
+        features_idx = -1
+        features_line = ""
+        
+        for i, line in enumerate(lines):
+            clean_line = line.strip()
+            if clean_line == req_cgroup:
+                has_cgroup = True
+            elif clean_line == req_mount:
+                has_mount = True
+            elif clean_line.startswith("features:"):
+                features_idx = i
+                features_line = clean_line
+
+        changed = False
+
+        if not has_cgroup:
+            lines.append(req_cgroup)
+            changed = True
+            
+        if not has_mount:
+            lines.append(req_mount)
+            changed = True
+
+        # Processar as features
+        required_features = {"keyctl=1", "nesting=1"}
+        
+        if features_idx != -1:
+            # Extrair features atuais
+            # Formato esperado: features: nesting=1,keyctl=1
+            parts = features_line.split(":", 1)
+            current_features_str = parts[1].strip() if len(parts) > 1 else ""
+            current_features = set(f.strip() for f in current_features_str.split(",") if f.strip())
+            
+            missing_features = required_features - current_features
+            if missing_features:
+                current_features.update(missing_features)
+                new_features_line = f"features: {','.join(current_features)}"
+                lines[features_idx] = new_features_line
+                changed = True
+        else:
+            lines.append(f"features: {','.join(required_features)}")
+            changed = True
+
+        restarted = False
+
+        if changed:
+            messages.append("Enabling VPN support")
+            import tempfile
+            import os
+            
+            new_content = "\n".join(lines) + "\n"
+            
+            # Escreve o arquivo via tmp seguro
+            with tempfile.NamedTemporaryFile("w", delete=False) as f:
+                f.write(new_content)
+                temp_path = f.name
+                
+            try:
+                self.shell_executor.run(["cp", temp_path, conf_path])
+            finally:
+                os.remove(temp_path)
+                
+            # Verifica se precisa reiniciar
+            status = self.get_container_status(container_id)
+            if status.status == "running":
+                messages.append("Restarting container")
+                self.restart_container(container_id)
+                restarted = True
+                
+                # Wait for it to be running again
+                max_retries = 30
+                for _ in range(max_retries):
+                    current = self.get_container_status(container_id)
+                    if current.status == "running":
+                        break
+                    time.sleep(1)
+        
+        messages.append("Container ready")
+        
+        return ConfigureVpnResult(
+            changed=changed,
+            restarted=restarted,
+            messages=messages
         )
 
     def _update_container_network_shell(

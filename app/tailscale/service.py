@@ -61,7 +61,7 @@ class TailscaleService:
             timeout=self.timeout,
             raise_on_error=False,
         )
-        return result.exit_code == 0
+        return result.success == True
 
     def get_version(self) -> str | None:
         """Retorna a versao instalada do Tailscale."""

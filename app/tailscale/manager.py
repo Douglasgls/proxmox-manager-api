@@ -30,6 +30,15 @@ class TailscaleManager:
         try:
             self.job_service.start(job_id)
 
+            # Prepara o container para VPN (idempotente)
+            vpn_result = self.container_session.proxmox_client.configure_container_for_vpn(
+                proxmox_container_id
+            )
+            for msg in vpn_result.messages:
+                self.job_service.update_progress(
+                    job_id, 5, current_step=msg, output=f"[VPN Config] {msg}"
+                )
+
             # Checking component
             self.job_service.update_progress(
                 job_id, 10, current_step="Checking component", current_component="Tailscale"
