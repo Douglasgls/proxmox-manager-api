@@ -591,12 +591,14 @@ class ProxmoxClient:
         container_id: int,
         command: str,
         timeout: int = 90,
+        raise_on_error: bool = True,
     ) -> CommandResult:
         """Executa um comando administrativo dentro de um container LXC."""
         return self._exec_container_command_shell(
             container_id=container_id,
             command=command,
-            timeout=timeout
+            timeout=timeout,
+            raise_on_error=raise_on_error
         )
 
     def _run_container_operation(
@@ -690,6 +692,7 @@ class ProxmoxClient:
         container_id: int,
         command: str,
         timeout: int = 90,
+        raise_on_error: bool = True,
     ) -> CommandResult:
         executed_at = datetime.now()
         started_at = perf_counter()
@@ -707,7 +710,8 @@ class ProxmoxClient:
                 "sh",
                 "-lc",
                 command,
-                timeout=timeout
+                timeout=timeout,
+                raise_on_error=raise_on_error,
             )
 
             return self._command_result_from_shell(

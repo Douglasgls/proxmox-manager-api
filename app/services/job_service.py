@@ -113,6 +113,8 @@ class JobService:
         event: str = "job_updated",
         container_id: int | None = None,
         target_container: str | None = None,
+        output: str | None = None,
+        error: str | None = None,
     ):
 
         job = self.get(
@@ -131,6 +133,15 @@ class JobService:
 
         if target_container is not None:
             job.target_container = target_container
+
+        if output is not None:
+            if job.output:
+                job.output += f"\n{output}"
+            else:
+                job.output = output
+
+        if error is not None:
+            job.error = error
 
         updated_job = (
             self.repository

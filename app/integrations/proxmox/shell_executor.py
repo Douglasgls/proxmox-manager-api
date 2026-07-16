@@ -16,6 +16,7 @@ class ShellExecutor:
         self,
         command: list[str],
         timeout: int | None = None,
+        raise_on_error: bool = True,
     ) -> ShellResult:
         import os
         env = os.environ.copy()
@@ -52,6 +53,9 @@ class ShellExecutor:
             success=completed.returncode == 0,
         )
 
+        if raise_on_error is False:
+            return result
+
         if not result.success:
             raise ShellExecutionError(
                 result.stderr
@@ -66,10 +70,12 @@ class ShellExecutor:
         self,
         *args,
         timeout: int | None = None,
+        raise_on_error: bool = True,
     ) -> ShellResult:
         return self.run(
             ["pct", *[str(arg) for arg in args]],
             timeout=timeout,
+            raise_on_error=raise_on_error,
         )
 
     def pvesh(

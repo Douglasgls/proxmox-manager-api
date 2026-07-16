@@ -22,6 +22,7 @@ class ContainerSession:
         self,
         command: str,
         timeout: int = 90,
+        raise_on_error: bool = True,
     ) -> CommandResult:
         logger.info(
             "Executando comando no container %s: %s",
@@ -32,7 +33,8 @@ class ContainerSession:
         return self.proxmox_client.exec(
             container_id=self.container_id,
             command=command,
-            timeout=timeout
+            timeout=timeout,
+            raise_on_error=raise_on_error,
         )
 
     def exec_many(

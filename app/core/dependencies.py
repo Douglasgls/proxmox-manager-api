@@ -91,6 +91,11 @@ from app.services.monitoring.network_monitoring_service import (
 from app.services.monitoring.storage_monitoring_service import (
     StorageMonitoringService,
 )
+from app.tailscale.manager import TailscaleManager
+from app.tailscale.service import TailscaleService
+from app.tailscale.repository import TailscaleRepository
+from app.integrations.proxmox.container_session import ContainerSession
+
 
 
 def get_db():
@@ -244,3 +249,23 @@ def get_audit_service(
     return AuditLogService(
         AuditLogRepository(db)
     )
+
+
+def get_tailscale_manager(
+    db=Depends(get_db),
+    job_service: JobService = Depends(get_job_service),
+    proxmox_client: ProxmoxClient = Depends(get_proxmox_client),
+):
+    repository = TailscaleRepository(db)
+    
+    # Factory to create the manager per container ID request
+    def factory(container_id: str, proxmox_container_id: int):
+        container_session = ContainerSession(proxmox_client, proxmox_container_id)
+        tailscale_service = TailscaleService(container_session)
+        return TailscaleManager(
+            job_service=job_service,
+            container_session=container_session,
+            tailscale_service=tailscale_service,
+            repository=repository,
+        )
+    return factory

@@ -20,6 +20,8 @@ from app.dto.response.container import (
 from app.core.dependencies import (
     get_container_service,
     get_container_creation_workflow,
+    get_job_service,
+    get_tailscale_manager,
 )
 from app.dto.response.job import JobCreatedResponseDTO
 from app.services.container_creation_workflow import ContainerCreationWorkflow
@@ -213,4 +215,38 @@ def update_network(
         **dto.model_dump(
             exclude_unset=True
         )
+    )
+
+@router.post(
+    "/containers/{id}/tailscale/setup",
+    response_model=JobCreatedResponseDTO,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def tailscale_setup(
+    id: str,
+    background_tasks: BackgroundTasks,
+    container_service: ContainerService = Depends(get_container_service),
+    job_service = Depends(get_job_service),
+    tailscale_manager_factory = Depends(get_tailscale_manager),
+):
+    # Verify container exists
+    container = container_service.get(id)
+    
+    # Create the job
+    job = job_service.create(
+        job_type="tailscale_setup",
+        target=container.id
+    )
+    
+    manager = tailscale_manager_factory(container.id, container.container_number)
+    
+    background_tasks.add_task(
+        manager.setup,
+        job.id,
+        container.id,
+        container.container_number
+    )
+    
+    return JobCreatedResponseDTO(
+        job_id=job.id
     )
