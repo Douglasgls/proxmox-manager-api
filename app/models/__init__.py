@@ -6,3 +6,4 @@ from app.models.job import Job
 from app.models.container_action import ContainerAction
 from app.models.audit_log import AuditLog
 from app.tailscale.model import TailscaleNode
+from app.access.model import AccessToken

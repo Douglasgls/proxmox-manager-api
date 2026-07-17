@@ -22,12 +22,16 @@ from app.core.dependencies import (
     get_container_creation_workflow,
     get_job_service,
     get_tailscale_manager,
+    get_access_token_manager,
 )
 from app.dto.response.job import JobCreatedResponseDTO
 from app.services.container_creation_workflow import ContainerCreationWorkflow
 from app.services.container_service import ContainerService
 from app.security.dependencies import get_current_user
 from app.models.user import User
+
+from app.access.manager import AccessTokenManager
+from app.access.dto import AccessTokenCreateResponseDTO, AccessTokenMetadataDTO
 
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -250,3 +254,25 @@ def tailscale_setup(
     return JobCreatedResponseDTO(
         job_id=job.id
     )
+
+
+@router.post(
+    "/containers/{id}/access-token",
+    response_model=AccessTokenCreateResponseDTO,
+)
+def create_access_token(
+    id: str,
+    manager: AccessTokenManager = Depends(get_access_token_manager)
+):
+    return manager.create_token(id)
+
+
+@router.get(
+    "/containers/{id}/access-token",
+    response_model=list[AccessTokenMetadataDTO],
+)
+def get_access_tokens(
+    id: str,
+    manager: AccessTokenManager = Depends(get_access_token_manager)
+):
+    return manager.list_tokens_metadata(id)

@@ -269,3 +269,12 @@ def get_tailscale_manager(
             repository=repository,
         )
     return factory
+
+from app.access.repository import AccessTokenRepository
+from app.access.service import AccessTokenService
+from app.access.manager import AccessTokenManager
+
+def get_access_token_manager(db=Depends(get_db)) -> AccessTokenManager:
+    repository = AccessTokenRepository(db)
+    service = AccessTokenService(repository)
+    return AccessTokenManager(service)
