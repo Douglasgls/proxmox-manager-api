@@ -18,10 +18,12 @@ from app.api.health import router as health
 from app.api.monitoring import router as monitoring
 from app.api.websocket import router as websocket
 from app.api.access_tokens import router as access_tokens
+from app.api.cloud import router as cloud_router
 from app.console.websocket_console import router as console_router
 from app.core.exceptions import AuthenticationError, DomainValidationError
 from app.services.monitoring.tasks.adapter import metrics_collector
 from app.services.job_events import job_event_manager
+from app.cloud.manager import cloud_manager
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -30,7 +32,9 @@ async def lifespan(app: FastAPI):
     job_event_manager.loop = asyncio.get_running_loop()
     print(f"[Lifespan DEBUG] Registrou o event loop principal no job_event_manager: {job_event_manager.loop}")
     task = asyncio.create_task(metrics_collector.start())
+    await cloud_manager.start()
     yield
+    await cloud_manager.stop()
     await metrics_collector.stop()
     task.cancel()
     try:
@@ -132,3 +136,7 @@ app.include_router(
     console_router
 )
 
+app.include_router(
+    tags=["cloud"],
+    router=cloud_router
+)
