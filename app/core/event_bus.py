@@ -102,3 +102,46 @@ class EventBus:
             await asyncio.gather(*tasks, return_exceptions=True)
 
 event_bus = EventBus()
+
+
+class Event:
+    """Base class for all internal events."""
+    pass
+
+
+class EnvironmentChanged(Event):
+    """Event published when the public environment state changes."""
+    pass
+
+
+class InternalEventBus:
+    """A simple internal event bus to coordinate messaging within the agent modules."""
+
+    def __init__(self) -> None:
+        self._listeners = {}
+
+    def subscribe(self, event_type: type, callback) -> None:
+        """Register a subscriber callback for a specific event type."""
+        if event_type not in self._listeners:
+            self._listeners[event_type] = []
+        self._listeners[event_type].append(callback)
+
+    def publish(self, event: Event) -> None:
+        """Publish an event to all registered subscriber callbacks (synchronously)."""
+        event_type = type(event)
+        print(f"\n[EVENT BUS] Evento ocorrido: {event_type.__name__}\n")
+        callbacks = self._listeners.get(event_type, [])
+        for cb in callbacks:
+            try:
+                cb(event)
+            except Exception as e:
+                logger.error(
+                    "Error invoking callback %s for event %s: %s",
+                    cb,
+                    event_type,
+                    e,
+                    exc_info=True,
+                )
+
+
+internal_event_bus = InternalEventBus()

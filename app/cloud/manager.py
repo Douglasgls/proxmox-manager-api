@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from app.cloud.auth_service import CloudAuthService
@@ -7,6 +8,7 @@ from app.cloud.handlers.heartbeat import HeartbeatHandler
 from app.cloud.handlers.system import SystemHandler
 from app.cloud.handlers.sync import EnvironmentSyncHandler
 from app.cloud.websocket_client import CloudWebSocketClient
+from app.cloud.publisher import EnvironmentChangedPublisher
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,8 @@ class CloudManager:
             dispatcher=self._dispatcher,
         )
 
+        self._publisher = EnvironmentChangedPublisher(self._connection_manager)
+
     @property
     def connection_manager(self) -> CloudConnectionManager:
         return self._connection_manager
@@ -42,6 +46,10 @@ class CloudManager:
         """Inicia a comunicação com a Cloud."""
 
         logger.info("CloudManager starting...")
+        try:
+            self._publisher.loop = asyncio.get_running_loop()
+        except Exception as e:
+            logger.warning("Failed to store running event loop: %s", e)
         await self._connection_manager.start()
 
     async def stop(self) -> None:

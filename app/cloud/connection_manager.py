@@ -88,6 +88,16 @@ class CloudConnectionManager:
             logger.info("Environment Token registered. Starting connection...")
             await self._connect_with_auth(settings)
 
+    async def send_message(self, message: str) -> None:
+        """Envia uma mensagem formatada via WebSocket se conectado."""
+
+        if not self._running or not self._ws_client.is_connected:
+            logger.warning("WebSocket is not connected. Message not sent.")
+            return
+
+        print(f"\n[WS ENVIADO] Enviando mensagem via WebSocket: {message}\n")
+        await self._ws_client.send(message)
+
     async def _connect_with_auth(self, settings: AgentSettings) -> None:
         """Garante JWT válido e abre conexão WebSocket."""
 
@@ -150,6 +160,7 @@ class CloudConnectionManager:
             while self._running:
                 try:
                     raw = await self._ws_client.receive()
+                    print(f"\n[WS RECEBIDO] Mensagem recebida via WebSocket: {raw}\n")
                 except Exception as exc:
                     if self._running:
                         logger.warning("WebSocket receive error: %s", exc)

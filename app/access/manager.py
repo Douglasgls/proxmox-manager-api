@@ -9,6 +9,15 @@ class AccessTokenManager:
     def create_token(self, container_id: str, description: str | None = None) -> AccessTokenCreateResponseDTO:
         token_record, raw_token = self.service.create_token_record(container_id, description)
         
+        try:
+            from app.core.event_bus import internal_event_bus, EnvironmentChanged
+            print("\n[EVENT ACTION] Access Token criado. Publicando EnvironmentChanged...\n")
+            internal_event_bus.publish(EnvironmentChanged())
+        except Exception:
+            # We don't import logger to avoid any issues or we can import it locally if needed,
+            # but raising/log is not strictly required if we just want a simple notify.
+            pass
+
         return AccessTokenCreateResponseDTO(
             token=raw_token,
             expires_at=token_record.expires_at,
@@ -30,4 +39,12 @@ class AccessTokenManager:
         
     def revoke_token(self, token_id: str) -> bool:
         token = self.service.revoke_token(token_id)
-        return token is not None
+        if token is not None:
+            try:
+                from app.core.event_bus import internal_event_bus, EnvironmentChanged
+                print("\n[EVENT ACTION] Access Token revogado. Publicando EnvironmentChanged...\n")
+                internal_event_bus.publish(EnvironmentChanged())
+            except Exception:
+                pass
+            return True
+        return False

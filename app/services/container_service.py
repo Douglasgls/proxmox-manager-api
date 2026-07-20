@@ -331,6 +331,15 @@ class ContainerService:
             message=operation.message,
         )
 
+        is_published = hasattr(updated_container, "tailscale_node") and updated_container.tailscale_node is not None
+        if is_published and operation.success:
+            try:
+                from app.core.event_bus import internal_event_bus, EnvironmentChanged
+                print(f"\n[EVENT ACTION] Container publicado iniciado. Publicando EnvironmentChanged...\n")
+                internal_event_bus.publish(EnvironmentChanged())
+            except Exception as ev_exc:
+                logger.error("Failed to publish EnvironmentChanged event after container start: %s", ev_exc)
+
         return self._operation_dto(
             container=updated_container,
             operation=operation.operation,
@@ -401,6 +410,15 @@ class ContainerService:
             message=operation.message,
         )
 
+        is_published = hasattr(updated_container, "tailscale_node") and updated_container.tailscale_node is not None
+        if is_published and operation.success:
+            try:
+                from app.core.event_bus import internal_event_bus, EnvironmentChanged
+                print(f"\n[EVENT ACTION] Container publicado parado. Publicando EnvironmentChanged...\n")
+                internal_event_bus.publish(EnvironmentChanged())
+            except Exception as ev_exc:
+                logger.error("Failed to publish EnvironmentChanged event after container stop: %s", ev_exc)
+
         return self._operation_dto(
             container=updated_container,
             operation=operation.operation,
@@ -460,6 +478,15 @@ class ContainerService:
             message=operation.message,
         )
 
+        is_published = hasattr(updated_container, "tailscale_node") and updated_container.tailscale_node is not None
+        if is_published and operation.success:
+            try:
+                from app.core.event_bus import internal_event_bus, EnvironmentChanged
+                print(f"\n[EVENT ACTION] Container publicado reiniciado. Publicando EnvironmentChanged...\n")
+                internal_event_bus.publish(EnvironmentChanged())
+            except Exception as ev_exc:
+                logger.error("Failed to publish EnvironmentChanged event after container restart: %s", ev_exc)
+
         return self._operation_dto(
             container=updated_container,
             operation=operation.operation,
@@ -490,6 +517,8 @@ class ContainerService:
             )
         )
 
+        is_published = hasattr(container, "tailscale_node") and container.tailscale_node is not None
+
         self.repository.delete(container)
 
         self._log_action(
@@ -499,6 +528,14 @@ class ContainerService:
             success=operation.success,
             message=operation.message,
         )
+
+        if is_published:
+            try:
+                from app.core.event_bus import internal_event_bus, EnvironmentChanged
+                print("\n[EVENT ACTION] Container publicado deletado. Publicando EnvironmentChanged...\n")
+                internal_event_bus.publish(EnvironmentChanged())
+            except Exception as ev_exc:
+                logger.error("Failed to publish EnvironmentChanged event after container deletion: %s", ev_exc)
 
         return ContainerOperationDTO(
             container_id=container.id,

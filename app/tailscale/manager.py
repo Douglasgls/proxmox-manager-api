@@ -132,6 +132,13 @@ class TailscaleManager:
             else:
                 self.repository.update(node)
 
+            try:
+                from app.core.event_bus import internal_event_bus, EnvironmentChanged
+                print("\n[EVENT ACTION] Setup do Tailscale concluído. Publicando EnvironmentChanged...\n")
+                internal_event_bus.publish(EnvironmentChanged())
+            except Exception as ev_exc:
+                logger.error("Failed to publish EnvironmentChanged event after tailscale setup: %s", ev_exc)
+
             # Finished
             self.job_service.finish(job_id, output="Setup do Tailscale finalizado com sucesso.")
 
