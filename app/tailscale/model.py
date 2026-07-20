@@ -43,3 +43,11 @@ class TailscaleNode(Base):
     )
 
     container = relationship("Container", backref="tailscale_node")
+
+    @property
+    def online(self) -> bool:
+        """Indica se o node está online na rede Tailscale."""
+        if self.status_json and isinstance(self.status_json, dict):
+            return self.status_json.get("Self", {}).get("Online", False)
+        return False
+

@@ -19,17 +19,19 @@ def parse_message(raw: str) -> CloudMessage | None:
 
 def build_response(
     request_id: str,
-    message_type: str,
+    message_type: str | None = None,
     payload: dict | None = None,
 ) -> str:
     """Serializa uma resposta para enviar à Cloud."""
 
     response = CloudResponse(
         request_id=request_id,
+        origin="agent",
+        success=True,
         type=message_type,
         payload=payload or {},
     )
-    return response.model_dump_json()
+    return response.model_dump_json(exclude_none=True)
 
 
 def build_error(
@@ -41,9 +43,12 @@ def build_error(
 
     error = CloudError(
         request_id=request_id,
+        origin="agent",
+        success=False,
         error=CloudErrorDetail(
             code=code,
             message=message,
         ),
     )
     return error.model_dump_json()
+

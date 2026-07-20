@@ -58,3 +58,22 @@ class ContainerRepository(
             .first()
             is not None
         )
+
+    def get_published_containers(self) -> list[Container]:
+        """Retorna todos os containers que possuem registro em tailscale_nodes,
+
+        carregando de forma eager os nodes do Tailscale e access tokens.
+        """
+        from sqlalchemy.orm import joinedload, selectinload
+        from app.tailscale.model import TailscaleNode
+
+        return (
+            self.db.query(Container)
+            .join(TailscaleNode)
+            .options(
+                joinedload(Container.tailscale_node),
+                selectinload(Container.access_tokens)
+            )
+            .all()
+        )
+

@@ -5,6 +5,7 @@ from app.cloud.connection_manager import CloudConnectionManager
 from app.cloud.dispatcher import CloudDispatcher
 from app.cloud.handlers.heartbeat import HeartbeatHandler
 from app.cloud.handlers.system import SystemHandler
+from app.cloud.handlers.sync import EnvironmentSyncHandler
 from app.cloud.websocket_client import CloudWebSocketClient
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,8 @@ class CloudManager:
         # Registrar handlers
         self._dispatcher.register("heartbeat", HeartbeatHandler.handle)
         self._dispatcher.register("system.info", SystemHandler.handle_info)
+        self._dispatcher.register("environment.sync", EnvironmentSyncHandler.handle_sync)
+
 
         self._connection_manager = CloudConnectionManager(
             auth_service=self._auth_service,
