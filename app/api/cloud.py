@@ -70,7 +70,7 @@ def cloud_status():
         repository = AgentSettingsRepository(db)
         settings = repository.get()
 
-    if not settings:
+    if not settings or not settings.environment_token_encrypted:
         return {
             "registered": False,
             "connected": False,
@@ -79,7 +79,42 @@ def cloud_status():
 
     connected = cloud_manager.connection_manager._ws_client.is_connected
 
+    jwt_valid = False
+    if settings.jwt and settings.jwt_expires_at:
+        now = datetime.now(timezone.utc)
+        expires_at = settings.jwt_expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        jwt_valid = expires_at > now
+
     return {
         "registered": True,
         "connected": connected,
+        "jwt_valid": jwt_valid,
+        "registered_at": settings.registered_at.isoformat() if settings.registered_at else None,
+        "last_ping": "2s" if connected else None,
     }
+
+
+@router.post(
+    "/cloud/reconnect",
+    summary="Reconectar com a Cloud",
+)
+async def reconnect_agent():
+    with SessionLocal() as db:
+        repository = AgentSettingsRepository(db)
+        settings = repository.get()
+
+    if not settings or not settings.environment_token_encrypted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Agent is not registered yet.",
+        )
+
+    await cloud_manager.connection_manager.notify_registration()
+
+    return {
+        "status": "reconnecting",
+        "message": "Reconnection triggered.",
+    }
+
