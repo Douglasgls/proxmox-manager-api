@@ -519,7 +519,8 @@ class ContainerService:
 
         is_published = hasattr(container, "tailscale_node") and container.tailscale_node is not None
 
-        self.repository.delete(container)
+        container_id_val = container.id
+        container_num_val = container.container_number
 
         self._log_action(
             action="delete",
@@ -528,6 +529,8 @@ class ContainerService:
             success=operation.success,
             message=operation.message,
         )
+
+        self.repository.delete(container)
 
         if is_published:
             try:
@@ -538,13 +541,14 @@ class ContainerService:
                 logger.error("Failed to publish EnvironmentChanged event after container deletion: %s", ev_exc)
 
         return ContainerOperationDTO(
-            container_id=container.id,
-            container_number=container.container_number,
+            container_id=container_id_val,
+            container_number=container_num_val,
             operation=operation.operation,
             success=operation.success,
             message=operation.message,
             status="deleted",
         )
+
 
 
 

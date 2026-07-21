@@ -122,10 +122,29 @@ class Container(Base):
     jobs = relationship(
         "Job",
         back_populates="container",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     actions = relationship(
         "ContainerAction",
-        cascade="all, delete-orphan"
+        back_populates="container",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
+
+    tailscale_node = relationship(
+        "TailscaleNode",
+        back_populates="container",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+
+    access_tokens = relationship(
+        "AccessToken",
+        back_populates="container",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+

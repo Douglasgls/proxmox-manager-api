@@ -9,7 +9,8 @@ from sqlalchemy import (
 
 from sqlalchemy.orm import (
     Mapped,
-    mapped_column
+    mapped_column,
+    relationship,
 )
 
 from .base import Base
@@ -25,7 +26,8 @@ class ContainerAction(Base):
 
     container_id: Mapped[str] = mapped_column(
         ForeignKey(
-            "containers.id"
+            "containers.id",
+            ondelete="CASCADE",
         )
     )
 
@@ -49,4 +51,10 @@ class ContainerAction(Base):
         datetime
     ] = mapped_column(
         default=datetime.now()
+    )
+
+    container = relationship(
+        "Container",
+        back_populates="actions",
+        passive_deletes=True,
     )

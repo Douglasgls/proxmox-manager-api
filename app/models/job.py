@@ -40,7 +40,8 @@ class Job(Base):
 
     target_container: Mapped[str | None] = mapped_column(
         ForeignKey(
-            "containers.id"
+            "containers.id",
+            ondelete="CASCADE",
         )
     )
 
@@ -83,5 +84,7 @@ class Job(Base):
 
     container = relationship(
         "Container",
-        back_populates="jobs"
+        back_populates="jobs",
+        passive_deletes=True,
     )
+

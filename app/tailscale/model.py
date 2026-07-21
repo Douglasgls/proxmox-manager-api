@@ -42,7 +42,7 @@ class TailscaleNode(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    container = relationship("Container", backref="tailscale_node")
+    container = relationship("Container", back_populates="tailscale_node", passive_deletes=True)
 
     @property
     def online(self) -> bool:

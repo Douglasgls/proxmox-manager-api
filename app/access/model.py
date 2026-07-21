@@ -24,4 +24,4 @@ class AccessToken(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
 
-    container = relationship("Container", backref="access_tokens")
+    container = relationship("Container", back_populates="access_tokens", passive_deletes=True)

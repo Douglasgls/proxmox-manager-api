@@ -3,9 +3,9 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import asyncio
 from datetime import datetime
 
-from app.monitoring.publisher import MonitoringPublisher
-from app.monitoring.scheduler import MonitoringScheduler
-from app.monitoring.dtos import HostMetricsDTO, ContainerInventorySummaryDTO, ContainerMetricsDTO
+from app.services.monitoring.tasks.publisher import MonitoringPublisher
+from app.services.monitoring.tasks.scheduler import MonitoringScheduler
+from app.dto.response.monitoring import HostMetricsDTO, ContainerInventorySummaryDTO, ContainerMetricsDTO
 
 class MonitoringTests(unittest.IsolatedAsyncioTestCase):
 
@@ -17,7 +17,8 @@ class MonitoringTests(unittest.IsolatedAsyncioTestCase):
             container_service=self.container_service,
         )
 
-    @patch("app.monitoring.publisher.event_bus")
+    @patch("app.services.monitoring.tasks.publisher.event_bus")
+
     async def test_publish_dashboard_metrics(self, mock_event_bus):
         host_metrics = HostMetricsDTO(
             cpu_usage_percent=10.0,
@@ -55,7 +56,7 @@ class MonitoringTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["data"]["containers_running"], 4)
         self.assertEqual(payload["data"]["containers_stopped"], 6)
 
-    @patch("app.monitoring.publisher.event_bus")
+    @patch("app.services.monitoring.tasks.publisher.event_bus")
     async def test_publish_host_metrics(self, mock_event_bus):
         host_metrics = HostMetricsDTO(
             cpu_usage_percent=15.0,
@@ -73,7 +74,7 @@ class MonitoringTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["event"], "host.metrics.updated")
         self.assertEqual(payload["data"]["cpu_usage_percent"], 15.0)
 
-    @patch("app.monitoring.publisher.event_bus")
+    @patch("app.services.monitoring.tasks.publisher.event_bus")
     async def test_publish_all_container_metrics(self, mock_event_bus):
         container_metrics = [
             ContainerMetricsDTO(container_id=101, status="running", cpu_usage_percent=5.0),
@@ -92,7 +93,7 @@ class MonitoringTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(payload["data"]), 2)
         self.assertEqual(payload["data"][0]["container_id"], 101)
 
-    @patch("app.monitoring.publisher.event_bus")
+    @patch("app.services.monitoring.tasks.publisher.event_bus")
     async def test_publish_container_metrics_single(self, mock_event_bus):
         metrics = ContainerMetricsDTO(container_id=101, status="running", cpu_usage_percent=5.0)
         self.container_service.get_container_metrics.return_value = metrics
@@ -106,7 +107,7 @@ class MonitoringTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["event"], "containers.101.metrics.updated")
         self.assertEqual(payload["data"]["container_id"], 101)
 
-    @patch("app.monitoring.scheduler.event_bus")
+    @patch("app.services.monitoring.tasks.scheduler.event_bus")
     async def test_scheduler_checks_subscribers_before_publishing(self, mock_event_bus):
         mock_publisher = MagicMock()
         mock_publisher.publish_dashboard_metrics = AsyncMock()
@@ -143,10 +144,11 @@ class MonitoringTests(unittest.IsolatedAsyncioTestCase):
         # Simulate scheduler's individual loop logic
         active_channels = mock_event_bus.list_channels()
         subscribed_container_ids = []
-        from app.monitoring.scheduler import CONTAINER_METRICS_PATTERN
+        from app.services.monitoring.tasks.scheduler import CONTAINER_METRICS_PATTERN
         for channel in active_channels:
             match = CONTAINER_METRICS_PATTERN.match(channel)
             if match:
                 subscribed_container_ids.append(int(match.group(1)))
                 
         self.assertEqual(subscribed_container_ids, [105])
+
