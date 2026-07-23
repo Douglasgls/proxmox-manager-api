@@ -46,7 +46,12 @@ class PublishedContainerService:
                     tailscale_ip=ts_node.tailscale_ip,
                     online=ts_node.online,
                     last_sync=ts_node.last_sync,
+                    hostname=ts_node.hostname,
+                    dns_name=ts_node.dns_name,
+                    last_seen=ts_node.last_seen,
+                    advertised_routes=ts_node.advertised_routes or [],
                 )
+
 
             # Mapear tokens de acesso associados
             tokens = []

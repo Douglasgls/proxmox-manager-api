@@ -51,3 +51,35 @@ class TailscaleNode(Base):
             return self.status_json.get("Self", {}).get("Online", False)
         return False
 
+    @property
+    def hostname(self) -> str | None:
+        """Retorna o hostname Tailscale do node."""
+        if self.status_json and isinstance(self.status_json, dict):
+            return self.status_json.get("Self", {}).get("HostName")
+        return None
+
+    @property
+    def dns_name(self) -> str | None:
+        """Retorna o DNS Name Tailscale do node."""
+        if self.status_json and isinstance(self.status_json, dict):
+            return self.status_json.get("Self", {}).get("DNSName")
+        return None
+
+    @property
+    def last_seen(self) -> str | None:
+        """Retorna a data/hora da última visualização do node."""
+        if self.status_json and isinstance(self.status_json, dict):
+            return self.status_json.get("Self", {}).get("LastSeen")
+        return None
+
+    @property
+    def advertised_routes(self) -> list[str]:
+        """Retorna a lista de rotas anunciadas pelo node."""
+        if self.status_json and isinstance(self.status_json, dict):
+            self_info = self.status_json.get("Self", {})
+            routes = self_info.get("AdvertisedRoutes") or self_info.get("PrimaryRoutes") or []
+            if isinstance(routes, list):
+                return routes
+        return []
+
+

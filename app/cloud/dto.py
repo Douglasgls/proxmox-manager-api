@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, AliasChoices
+
 
 
 class CloudMessage(BaseModel):
@@ -42,6 +43,28 @@ class AgentRegistrationDTO(BaseModel):
     environment_token: str = Field(min_length=1)
 
 
+class ContainerProvisionPayloadDTO(BaseModel):
+    """Payload para provisionamento de container recebido da Cloud."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    request_id: str | None = None
+    environment_id: str | None = None
+    container_id: str = Field(
+        validation_alias=AliasChoices("api_local_container_id", "container_id")
+    )
+    login_server: str = Field(
+        validation_alias=AliasChoices("headscale_url", "login_server")
+    )
+    auth_key: str = Field(
+        validation_alias=AliasChoices("preauth_key", "auth_key")
+    )
+    hostname: str | None = None
+    published_container_id: str | None = None
+    container_number: int | None = None
+    headscale_user: str | None = None
+
+
 class PublishedTailscaleNodeSnapshotDTO(BaseModel):
     installed: bool
     service_running: bool
@@ -51,6 +74,11 @@ class PublishedTailscaleNodeSnapshotDTO(BaseModel):
     tailscale_ip: str | None = None
     online: bool
     last_sync: Optional[Any] = None  # datetime is handled dynamically or serializable
+    hostname: str | None = None
+    dns_name: str | None = None
+    last_seen: Optional[Any] = None
+    advertised_routes: list[str] = Field(default_factory=list)
+
 
 
 class PublishedAccessTokenSnapshotDTO(BaseModel):

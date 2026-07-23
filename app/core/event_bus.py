@@ -109,9 +109,20 @@ class Event:
     pass
 
 
+from dataclasses import dataclass
+
+
 class EnvironmentChanged(Event):
     """Event published when the public environment state changes."""
     pass
+
+
+@dataclass
+class ContainerProvisionCompleted(Event):
+    """Event published when a container has finished provisioning in Tailscale."""
+    container_id: str
+    request_id: str
+
 
 
 class InternalEventBus:

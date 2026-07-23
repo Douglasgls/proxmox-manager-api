@@ -1,13 +1,13 @@
 import asyncio
 import json
 import logging
-from app.core.event_bus import internal_event_bus, EnvironmentChanged
+from app.core.event_bus import internal_event_bus, EnvironmentChanged, ContainerProvisionCompleted
 
 logger = logging.getLogger(__name__)
 
 
 class EnvironmentChangedPublisher:
-    """Publisher que escuta EnvironmentChanged e envia para a Cloud com debounce."""
+    """Publisher que escuta EnvironmentChanged e ContainerProvisionCompleted e envia para a Cloud com debounce."""
 
     def __init__(self, connection_manager) -> None:
         self._connection_manager = connection_manager
@@ -15,8 +15,10 @@ class EnvironmentChangedPublisher:
         self.loop = None
         # Subscrever ao barramento de eventos interno
         internal_event_bus.subscribe(EnvironmentChanged, self.handle_environment_changed)
+        internal_event_bus.subscribe(ContainerProvisionCompleted, self.handle_environment_changed)
 
-    def handle_environment_changed(self, event: EnvironmentChanged) -> None:
+    def handle_environment_changed(self, event) -> None:
+
         """Trata o evento recebido, ignorando-o se já houver um agendamento pendente."""
         if self._pending_task is not None and not self._pending_task.done():
             logger.debug("EnvironmentChanged received, but debounce is active. Ignoring.")
