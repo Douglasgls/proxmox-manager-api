@@ -1,44 +1,29 @@
-from datetime import datetime
-from ipaddress import ip_address as parse_ip_address
-import re
+import logging
 from time import perf_counter
 
-from app.core.exceptions import DomainValidationError
-from app.models.container import (
-    Container
-)
-from app.models.network_configuration import (
-    NetworkConfiguration,
-    NetworkIpMode,
-)
-
-from app.dto.response.container import (
-    ContainerOperationDTO,
-    ContainerStatusDTO,
-)
-
-from app.integrations.proxmox import (
-    ContainerInfo,
-    ProxmoxClient,
-    ContainerSession,
-    ContainerStatus,
-)
+from app.dto.response.container import ContainerOperationDTO, ContainerStatusDTO
+from app.integrations.proxmox import ProxmoxClient
+from app.models.container import Container
+from app.models.network_configuration import NetworkConfiguration
 from app.provision.engine import ProvisionEngine
 from app.provision.plan import ProvisionPlan
-import logging
-import time
-
-from app.repositories.container_repository import (
-    ContainerRepository
-)
-from app.services.audit_log_service import (
-    AuditLogService
-)
+from app.repositories.container_repository import ContainerRepository
+from app.services.audit_log_service import AuditLogService
+from app.services.container.container_lifecycle_service import ContainerLifecycleService
+from app.services.container.container_network_service import ContainerNetworkService
+from app.services.container.container_sync_service import ContainerSyncService
 
 logger = logging.getLogger(__name__)
 
 
 class ContainerService:
+    """Facade unificado para gerenciamento de containers LXC.
+    
+    Delegando responsabilidades para os sub-serviços especializados:
+    - ContainerNetworkService (construção e validação de rede)
+    - ContainerSyncService (sincronização de estado runtime com Proxmox)
+    - ContainerLifecycleService (criação, ciclo de vida e destruição)
+    """
 
     def __init__(
         self,
@@ -52,6 +37,20 @@ class ContainerService:
         self.audit_log_service = audit_log_service
         self.provision_engine = provision_engine or ProvisionEngine()
 
+        self.network_service = ContainerNetworkService()
+        self.sync_service = ContainerSyncService(
+            repository=self.repository,
+            proxmox_client=self.proxmox_client,
+            audit_log_service=self.audit_log_service,
+        )
+        self.lifecycle_service = ContainerLifecycleService(
+            repository=self.repository,
+            proxmox_client=self.proxmox_client,
+            network_service=self.network_service,
+            sync_service=self.sync_service,
+            audit_log_service=self.audit_log_service,
+            provision_engine=self.provision_engine,
+        )
 
     def create(
         self,
@@ -74,11 +73,14 @@ class ContainerService:
         lifecycle_callbacks: dict | None = None,
         provision_callbacks: dict | None = None,
         created_by: str | None = None,
-    ):
-
-        started_at = perf_counter()
-        lifecycle = lifecycle_callbacks or {}
-        network = self._build_network(
+    ) -> Container:
+        return self.lifecycle_service.create(
+            name=name,
+            password=password,
+            cpu=cpu,
+            memory_mb=memory_mb,
+            disk_gb=disk_gb,
+            image_name=image_name,
             bridge=bridge,
             ip_mode=ip_mode,
             ip_address=ip_address,
@@ -88,1039 +90,99 @@ class ContainerService:
             mtu=mtu,
             vlan=vlan,
             mac_address=mac_address,
-        )
-        existing = (
-            self.repository
-            .get_by_name(
-                name
-            )
-        )
-
-        if existing:
-            raise ValueError(
-                "Container já existe"
-            )
-
-        logger.info("Creating container...")
-        self._notify_lifecycle(
-            lifecycle,
-            "waiting_proxmox_task",
-        )
-        proxmox_container = (
-            self.proxmox_client
-            .create_container(
-                name=name,
-                cpu=cpu,
-                memory_mb=memory_mb,
-                network=network,
-                disk_gb=disk_gb,
-                image_name=image_name,
-                password=password
-            )
-        )
-        logger.info("Container created.")
-        self._notify_lifecycle(
-            lifecycle,
-            "container_created",
-            proxmox_container,
-        )
-
-        logger.info("Starting container...")
-        self._notify_lifecycle(
-            lifecycle,
-            "container_starting",
-            proxmox_container,
-        )
-        self.proxmox_client.start_container(
-            proxmox_container.container_id
-        )
-
-        time.sleep(10)  
-
-        # Aguardar container subir
-        max_attempts = 30
-        status = "stopped"
-        for _ in range(max_attempts):
-            status_info = self.proxmox_client.get_container_status(
-                proxmox_container.container_id
-            )
-
-            status = status_info.status
-
-            if status == "running":
-                break
-
-            time.sleep(1)
-        
-
-        if status != "running":
-            raise ValueError(
-                "Timeout aguardando container iniciar."
-            )
-        
-        logger.info("Container started.")
-        self._notify_lifecycle(
-            lifecycle,
-            "container_started",
-            proxmox_container,
-        )
-
-        container = Container(
-            container_number=proxmox_container.container_id,
-            name=name,
-            cpu=cpu,
-            memory_mb=memory_mb,
-            disk_gb=(
-                proxmox_container.disk_gb
-                or 2
-            ),
-            image_name=proxmox_container.image_name,
-            password=password,
+            provision_plan=provision_plan,
+            lifecycle_callbacks=lifecycle_callbacks,
+            provision_callbacks=provision_callbacks,
             created_by=created_by,
         )
-        self._apply_network_configuration(
-            container=container,
-            network=network,
-        )
 
-        created_container = (
-            self.repository
-            .create(
-                container
-            )
-        )
+    def start(self, container_id) -> ContainerOperationDTO:
+        container = self._get_container_or_fail(container_id)
+        return self.lifecycle_service.start(container)
 
-        created_container = self._sync_container_runtime(created_container)
+    def stop(self, container_id) -> ContainerOperationDTO:
+        container = self._get_container_or_fail(container_id)
+        return self.lifecycle_service.stop(container)
 
-        self._notify_lifecycle(
-            lifecycle,
-            "container_persisted",
-            created_container,
-        )
+    def restart(self, container_id) -> ContainerOperationDTO:
+        container = self._get_container_or_fail(container_id)
+        return self.lifecycle_service.restart(container)
 
-        self._log_action(
-            action="create",
-            container=created_container,
-            started_at=started_at,
-            success=True,
-            message="Container criado no Proxmox e persistido no banco.",
-        )
+    def delete(self, container_id) -> ContainerOperationDTO:
+        container = self._get_container_or_fail(container_id)
+        return self.lifecycle_service.delete(container)
 
-        logger.info("Criando sessão administrativa...")
-        session = ContainerSession(
-            proxmox_client=self.proxmox_client,
-            container_id=proxmox_container.container_id,
-        )
+    def get_status(self, container_id) -> ContainerStatusDTO:
+        container = self._get_container_or_fail(container_id)
+        return self.sync_service.get_status(container)
 
-        plan = provision_plan or ProvisionPlan(
-            id="default",
-            name="Default Provision",
-            description="Provisionamento padrão",
-            components=[],
-        )
-        callbacks = provision_callbacks or {}
-
-        logger.info("Provisioning components...")
-        self._notify_lifecycle(
-            lifecycle,
-            "provisioning_started",
-            plan,
-        )
-        result = self.provision_engine.execute(
-            plan=plan,
-            session=session,
-            on_component_install_start=callbacks.get(
-                "install_start"
-            ),
-            on_component_install_finish=callbacks.get(
-                "install_finish"
-            ),
-            on_component_validate_start=callbacks.get(
-                "validate_start"
-            ),
-            on_component_validate_finish=callbacks.get(
-                "validate_finish"
-            ),
-        )
-
-        if not result.success:
-            logger.error("Erro no provisionamento: %s", result.error)
-            raise RuntimeError(result.error)
-
-        logger.info("Provisioning completed.")
-        logger.info("Container created successfully.")
-
-        return created_container
-
-    def _notify_lifecycle(
-        self,
-        lifecycle_callbacks: dict,
-        event: str,
-        value=None,
-    ):
-        callback = lifecycle_callbacks.get(
-            event
-        )
-
-        if callback:
-            callback(
-                value
-            )
-
-
-    def start(
-        self,
-        container_id
-    ):
-
-        started_at = perf_counter()
-
-        container = self._get_container_or_fail(
-            container_id
-        )
-
-        try:
-            container = self._sync_container_runtime(container)
-        except Exception as e:
-            logger.warning(f"Initial sync failed in start operation: {e}")
-
-        if (
-            container.status
-            ==
-            "running"
-        ):
-            raise ValueError(
-                "Container já iniciado"
-            )
-
-        operation = (
-            self.proxmox_client
-            .start_container(
-                container_id=container.container_number
-            )
-        )
-
-        # Aguardar finalizar
-        max_attempts = 30
-        for _ in range(max_attempts):
-            try:
-                status_info = self.proxmox_client.get_container_status(
-                    container.container_number
-                )
-                if status_info.status == "running":
-                    break
-            except Exception as e:
-                logger.warning(f"Error checking status during start wait loop: {e}")
-            time.sleep(1)
-
-        try:
-            updated_container = self._sync_container_runtime(container)
-        except Exception as e:
-            logger.warning(f"Final sync failed in start operation: {e}")
-            container.status = "running"
-            container.updated_at = datetime.now()
-            updated_container = self.repository.update(container)
-
-        logger.info("Container started.")
-
-        self._log_action(
-            action="start",
-            container=updated_container,
-            started_at=started_at,
-            success=operation.success,
-            message=operation.message,
-        )
-
-        is_published = hasattr(updated_container, "tailscale_node") and updated_container.tailscale_node is not None
-        if is_published and operation.success:
-            try:
-                from app.core.event_bus import internal_event_bus, EnvironmentChanged
-                print(f"\n[EVENT ACTION] Container publicado iniciado. Publicando EnvironmentChanged...\n")
-                internal_event_bus.publish(EnvironmentChanged())
-            except Exception as ev_exc:
-                logger.error("Failed to publish EnvironmentChanged event after container start: %s", ev_exc)
-
-        return self._operation_dto(
-            container=updated_container,
-            operation=operation.operation,
-            success=operation.success,
-            message=operation.message,
-        )
-
-
-    def stop(
-        self,
-        container_id
-    ):
-
-        started_at = perf_counter()
-        container = self._get_container_or_fail(
-            container_id
-        )
-
-        try:
-            container = self._sync_container_runtime(container)
-        except Exception as e:
-            logger.warning(f"Initial sync failed in stop operation: {e}")
-
-        if (
-            container.status
-            ==
-            "stopped"
-        ):
-            raise ValueError(
-                "Container já parado"
-            )
-
-        operation = (
-            self.proxmox_client
-            .stop_container(
-                container.container_number
-            )
-        )
-
-        # Aguardar finalizar
-        max_attempts = 30
-        for _ in range(max_attempts):
-            try:
-                status_info = self.proxmox_client.get_container_status(
-                    container.container_number
-                )
-                if status_info.status == "stopped":
-                    break
-            except Exception as e:
-                logger.warning(f"Error checking status during stop wait loop: {e}")
-            time.sleep(1)
-
-        try:
-            updated_container = self._sync_container_runtime(container)
-        except Exception as e:
-            logger.warning(f"Final sync failed in stop operation: {e}")
-            container.status = "stopped"
-            container.updated_at = datetime.now()
-            updated_container = self.repository.update(container)
-
-        logger.info("Container stopped.")
-
-        self._log_action(
-            action="stop",
-            container=updated_container,
-            started_at=started_at,
-            success=operation.success,
-            message=operation.message,
-        )
-
-        is_published = hasattr(updated_container, "tailscale_node") and updated_container.tailscale_node is not None
-        if is_published and operation.success:
-            try:
-                from app.core.event_bus import internal_event_bus, EnvironmentChanged
-                print(f"\n[EVENT ACTION] Container publicado parado. Publicando EnvironmentChanged...\n")
-                internal_event_bus.publish(EnvironmentChanged())
-            except Exception as ev_exc:
-                logger.error("Failed to publish EnvironmentChanged event after container stop: %s", ev_exc)
-
-        return self._operation_dto(
-            container=updated_container,
-            operation=operation.operation,
-            success=operation.success,
-            message=operation.message,
-        )
-
-
-    def restart(
-        self,
-        container_id
-    ):
-
-        started_at = perf_counter()
-        container = self._get_container_or_fail(
-            container_id
-        )
-
-        try:
-            container = self._sync_container_runtime(container)
-        except Exception as e:
-            logger.warning(f"Initial sync failed in restart operation: {e}")
-
-        operation = (
-            self.proxmox_client
-            .restart_container(
-                container.container_number
-            )
-        )
-
-        # Aguardar finalizar
-        max_attempts = 30
-        for _ in range(max_attempts):
-            try:
-                status_info = self.proxmox_client.get_container_status(
-                    container.container_number
-                )
-                if status_info.status == "running":
-                    break
-            except Exception as e:
-                logger.warning(f"Error checking status during restart wait loop: {e}")
-            time.sleep(1)
-
-        try:
-            updated_container = self._sync_container_runtime(container)
-        except Exception as e:
-            logger.warning(f"Final sync failed in restart operation: {e}")
-            container.status = "running"
-            container.updated_at = datetime.now()
-            updated_container = self.repository.update(container)
-
-        self._log_action(
-            action="restart",
-            container=updated_container,
-            started_at=started_at,
-            success=operation.success,
-            message=operation.message,
-        )
-
-        is_published = hasattr(updated_container, "tailscale_node") and updated_container.tailscale_node is not None
-        if is_published and operation.success:
-            try:
-                from app.core.event_bus import internal_event_bus, EnvironmentChanged
-                print(f"\n[EVENT ACTION] Container publicado reiniciado. Publicando EnvironmentChanged...\n")
-                internal_event_bus.publish(EnvironmentChanged())
-            except Exception as ev_exc:
-                logger.error("Failed to publish EnvironmentChanged event after container restart: %s", ev_exc)
-
-        return self._operation_dto(
-            container=updated_container,
-            operation=operation.operation,
-            success=operation.success,
-            message=operation.message,
-        )
-
-
-    def delete(
-        self,
-        container_id
-    ):
-
-        started_at = perf_counter()
-        container = self._get_container_or_fail(
-            container_id
-        )
-
-        try:
-            container = self._sync_container_runtime(container)
-        except Exception as e:
-            logger.warning(f"Initial sync failed in delete operation: {e}")
-
-        operation = (
-            self.proxmox_client
-            .delete_container(
-                container.container_number
-            )
-        )
-
-        is_published = hasattr(container, "tailscale_node") and container.tailscale_node is not None
-
-        container_id_val = container.id
-        container_num_val = container.container_number
-
-        self._log_action(
-            action="delete",
-            container=container,
-            started_at=started_at,
-            success=operation.success,
-            message=operation.message,
-        )
-
-        self.repository.delete(container)
-
-        if is_published:
-            try:
-                from app.core.event_bus import internal_event_bus, EnvironmentChanged
-                print("\n[EVENT ACTION] Container publicado deletado. Publicando EnvironmentChanged...\n")
-                internal_event_bus.publish(EnvironmentChanged())
-            except Exception as ev_exc:
-                logger.error("Failed to publish EnvironmentChanged event after container deletion: %s", ev_exc)
-
-        return ContainerOperationDTO(
-            container_id=container_id_val,
-            container_number=container_num_val,
-            operation=operation.operation,
-            success=operation.success,
-            message=operation.message,
-            status="deleted",
-        )
-
-
-
-
-    def get_status(
-        self,
-        container_id
-    ):
-
-        container = self._get_container_or_fail(
-            container_id
-        )
-
-        proxmox_status = (
-            self.proxmox_client
-            .get_container_status(
-                container.container_number
-            )
-        )
-
-        self._sync_container_runtime(container, status_info=proxmox_status)
-
-        return ContainerStatusDTO(
-            container_id=container.id,
-            container_number=container.container_number,
-            status=proxmox_status.status,
-            proxmox_status=proxmox_status.status,
-            uptime_seconds=proxmox_status.uptime_seconds,
-            cpu_usage_percent=proxmox_status.cpu_usage_percent,
-            memory_usage_mb=proxmox_status.memory_usage_mb,
-        )
-
-
-    def sync(
-        self,
-        container_id
-    ):
-
-        started_at = perf_counter()
-        container = self._get_container_or_fail(
-            container_id
-        )
-
-        updated_container = self._sync_container_runtime(container)
-
-        self._log_action(
-            action="sync",
-            container=updated_container,
-            started_at=started_at,
-            success=True,
-            message="Container sincronizado com Proxmox.",
-        )
-
-        return updated_container
+    def sync(self, container_id) -> Container:
+        container = self._get_container_or_fail(container_id)
+        return self.sync_service.sync(container)
 
     def sync_all(self) -> list[Container]:
-        """Sincroniza o estado de runtime de todos os containers no banco com o Proxmox."""
-        containers = self.repository.list()
-        updated_containers = []
-        for container in containers:
-            try:
-                updated = self._sync_container_runtime(container)
-                updated_containers.append(updated)
-            except Exception as e:
-                logger.warning(
-                    f"Falha ao sincronizar container {container.id} (vmid: {container.container_number}): {e}"
-                )
-        return updated_containers
+        return self.sync_service.sync_all()
 
-    def list(self):
+    def list(self) -> list[Container]:
+        return self.repository.list()
 
-        return (
-            self.repository
-            .list()
-        )
-
-
-    def get(
-        self,
-        container_id
-    ):
-
-        return self._get_container_or_fail(
-            container_id
-        )
-
+    def get(self, container_id) -> Container:
+        return self._get_container_or_fail(container_id)
 
     def list_networks(self):
-        print(type(self.proxmox_client))
-        print(self.proxmox_client.__class__)
-        print(self.proxmox_client.__module__)
-        print([m for m in dir(self.proxmox_client) if "list_networks" in m.lower()])
-        print("list_networks called", self.proxmox_client.list_networks())
-        return (
-            self.proxmox_client
-            .list_networks()
-        )
+        return self.proxmox_client.list_networks()
 
-
-    def update_network(
-        self,
-        container_id,
-        **network_data,
-    ):
-
+    def update_network(self, container_id, **network_data) -> Container:
         started_at = perf_counter()
-        container = self._get_container_or_fail(
-            container_id
-        )
-        network = self._build_network_from_container(
+        container = self._get_container_or_fail(container_id)
+        network = self.network_service.build_network_from_container(
             container=container,
             network_data=network_data,
         )
 
-        operation = (
-            self.proxmox_client
-            .update_container_network(
-                container_id=container.container_number,
-                network=network,
-            )
+        operation = self.proxmox_client.update_container_network(
+            container_id=container.container_number,
+            network=network,
         )
 
-        self._apply_network_configuration(
+        self.network_service.apply_network_configuration(
             container=container,
             network=network,
         )
-        self._apply_operation_result(
-            container=container,
-            status=operation.status or container.status,
-            ip_address=(
-                operation.ip_address
-                or network.ip_address
-            ),
-        )
-
-        updated_container = (
-            self.repository
-            .update(
-                container
-            )
-        )
-
-        self._log_action(
-            action="update_network",
-            container=updated_container,
-            started_at=started_at,
-            success=operation.success,
-            message=operation.message,
-        )
-
-        return updated_container
-
-
-# Private
-# TODO: Todas as validações precisam ser refatoradas para validar tudo de uma vez só, ao invés de validar campo por campo. 
-
-    def _sync_container_runtime(
-        self,
-        container: Container,
-        status_info: ContainerStatus | None = None,
-    ) -> Container:
-        logger.info("Synchronizing runtime state...")
-        if status_info is None:
-            status_info = self.proxmox_client.get_container_status(
-                container.container_number
-            )
-        logger.info(f"Runtime status: {status_info.status}")
-
-        container.status = status_info.status
-        if status_info.ip_address:
-            container.ip_address = status_info.ip_address
-        container.updated_at = datetime.now()
+        container.status = operation.status or container.status
+        if operation.ip_address or network.ip_address:
+            container.ip_address = operation.ip_address or network.ip_address
 
         updated_container = self.repository.update(container)
-        logger.info("Runtime synchronized.")
+
+        if self.audit_log_service:
+            self.audit_log_service.log(
+                entity="container",
+                entity_id=updated_container.id,
+                action="update_network",
+                details={
+                    "container_number": updated_container.container_number,
+                    "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+                    "success": operation.success,
+                    "message": operation.message,
+                    "status": updated_container.status,
+                },
+            )
+
         return updated_container
 
-    def _get_container_or_fail(
-        self,
-        container_id
-    ):
-
-        container = (
-            self.repository
-            .get(
-                container_id
-            )
-        )
-
+    # Métodos privados utilitários mantidos para retrocompatibilidade
+    def _get_container_or_fail(self, container_id) -> Container:
+        container = self.repository.get(container_id)
         if not container:
-            raise ValueError(
-                "Container não encontrado"
-            )
-
+            raise ValueError("Container não encontrado")
         return container
 
+    def _sync_container_runtime(self, container: Container, status_info=None) -> Container:
+        return self.sync_service.sync_container_runtime(container, status_info=status_info)
 
-    def _build_network_from_container(
-        self,
-        container: Container,
-        network_data: dict,
-    ) -> NetworkConfiguration:
+    def _build_network(self, **kwargs) -> NetworkConfiguration:
+        return self.network_service.build_network(**kwargs)
 
-        values = self._current_network_values(
-            container
-        )
-
-        if (
-            network_data.get("ip_mode")
-            ==
-            NetworkIpMode.DHCP.value
-            and
-            not self._has_static_fields(network_data)
-        ):
-            values.update(
-                self._empty_static_values()
-            )
-
-        values.update(
-            network_data
-        )
-
-        return self._build_network(
-            **values
-        )
-
-
-    def _current_network_values(
-        self,
-        container: Container,
-    ) -> dict:
-
-        ip_mode = container.ip_mode or NetworkIpMode.DHCP.value
-
-        return {
-            "bridge": container.bridge or "vmbr0",
-            "ip_mode": ip_mode,
-            "ip_address": self._current_static_value(
-                ip_mode,
-                container.ip_address,
-            ),
-            "cidr": self._current_static_value(
-                ip_mode,
-                container.cidr,
-            ),
-            "gateway": self._current_static_value(
-                ip_mode,
-                container.gateway,
-            ),
-            "firewall": container.firewall,
-            "mtu": container.mtu,
-            "vlan": container.vlan,
-            "mac_address": container.mac_address,
-        }
-
-
-    def _current_static_value(
-        self,
-        ip_mode: str,
-        value,
-    ):
-
-        if ip_mode == NetworkIpMode.DHCP.value:
-            return None
-
-        return value
-
-
-    def _empty_static_values(
-        self,
-    ) -> dict:
-
-        return {
-            "ip_address": None,
-            "cidr": None,
-            "gateway": None,
-        }
-
-
-    def _has_static_fields(
-        self,
-        network_data: dict,
-    ) -> bool:
-
-        return any(
-            network_data.get(field) is not None
-            for field in (
-                "ip_address",
-                "cidr",
-                "gateway",
-            )
-        )
-
-
-    def _build_network(
-        self,
-        bridge,
-        ip_mode,
-        ip_address=None,
-        cidr=None,
-        gateway=None,
-        firewall=False,
-        mtu=None,
-        vlan=None,
-        mac_address=None,
-    ) -> NetworkConfiguration:
-
-        network = NetworkConfiguration(
-            bridge=bridge,
-            ip_mode=self._network_ip_mode(ip_mode),
-            ip_address=ip_address,
-            cidr=cidr,
-            gateway=gateway,
-            firewall=bool(firewall),
-            mtu=mtu,
-            vlan=vlan,
-            mac_address=mac_address,
-        )
-
-        self._validate_network(
-            network
-        )
-
-        return network
-
-
-    def _network_ip_mode(
-        self,
-        ip_mode,
-    ) -> NetworkIpMode:
-
-        try:
-            return NetworkIpMode(
-                ip_mode
-            )
-        except ValueError as exc:
-            raise DomainValidationError(
-                "Modo de IP inválido. Use 'dhcp' ou 'static'."
-            ) from exc
-
-
-    def _validate_network(
-        self,
-        network: NetworkConfiguration,
-    ):
-
-        if not network.bridge:
-            raise DomainValidationError(
-                "Bridge de rede é obrigatória"
-            )
-
-        validators = {
-            NetworkIpMode.DHCP: self._validate_dhcp,
-            NetworkIpMode.STATIC: self._validate_static,
-        }
-        validators[network.ip_mode](
-            network
-        )
-
-        self._validate_optional_network_fields(
-            network
-        )
-
-
-    def _validate_dhcp(
-        self,
-        network: NetworkConfiguration,
-    ):
-
-        if (
-            network.ip_address
-            or network.gateway
-            or network.cidr is not None
-        ):
-            raise DomainValidationError(
-                "Configuração DHCP não permite ip_address, gateway ou cidr"
-            )
-
-
-    def _validate_static(
-        self,
-        network: NetworkConfiguration,
-    ):
-
-        missing = [
-            field
-            for field, value in {
-                "ip_address": network.ip_address,
-                "gateway": network.gateway,
-                "cidr": network.cidr,
-            }.items()
-            if value is None
-        ]
-
-        if missing:
-            raise DomainValidationError(
-                "Configuração static exige: "
-                + ", ".join(missing)
-            )
-
-        self._validate_ip_address(
-            "ip_address",
-            network.ip_address,
-        )
-        self._validate_ip_address(
-            "gateway",
-            network.gateway,
-        )
-        self._validate_cidr(
-            network.cidr
-        )
-
-
-    def _validate_optional_network_fields(
-        self,
-        network: NetworkConfiguration,
-    ):
-
-        if network.mtu is not None and network.mtu <= 0:
-            raise DomainValidationError(
-                "MTU deve ser maior que zero"
-            )
-
-        if network.vlan is not None and not 1 <= network.vlan <= 4094:
-            raise DomainValidationError(
-                "VLAN deve estar entre 1 e 4094"
-            )
-
-        self._validate_mac_address(
-            network.mac_address
-        )
-
-
-    def _validate_ip_address(
-        self,
-        field_name: str,
-        value: str | None,
-    ):
-
-        try:
-            parse_ip_address(
-                value
-            )
-        except ValueError as exc:
-            raise DomainValidationError(
-                f"{field_name} inválido"
-            ) from exc
-
-
-    def _validate_cidr(
-        self,
-        cidr: int | None,
-    ):
-
-        if cidr is None:
-            return
-
-        if not 0 <= cidr <= 32:
-            raise DomainValidationError(
-                "CIDR deve estar entre 0 e 32"
-            )
-
-
-    def _validate_mac_address(
-        self,
-        mac_address: str | None,
-    ):
-
-        if mac_address is None:
-            return
-
-        if not re.fullmatch(
-            r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}",
-            mac_address,
-        ):
-            raise DomainValidationError(
-                "MAC address inválido"
-            )
-
-
-    def _apply_network_configuration(
-        self,
-        container: Container,
-        network: NetworkConfiguration,
-    ):
-
-        container.bridge = network.bridge
-        container.ip_mode = network.ip_mode.value
-        container.ip_address = network.ip_address
-        container.cidr = network.cidr
-        container.gateway = network.gateway
-        container.firewall = network.firewall
-        container.mtu = network.mtu
-        container.vlan = network.vlan
-        container.mac_address = network.mac_address
-
-
-    def _operation_dto(
-        self,
-        container: Container,
-        operation: str,
-        success: bool,
-        message: str,
-    ):
-
-        return ContainerOperationDTO(
-            container_id=container.id,
-            container_number=container.container_number,
-            operation=operation,
-            success=success,
-            message=message,
-            status=container.status,
-        )
-
-
-    def _apply_operation_result(
-        self,
-        container: Container,
-        status: str,
-        ip_address: str | None = None,
-    ):
-
-        container.status = status
-
-        if ip_address:
-            container.ip_address = ip_address
-
-        container.updated_at = datetime.now()
-
-
-    def _apply_container_info(
-        self,
-        container: Container,
-        proxmox_container: ContainerInfo,
-    ):
-
-        container.name = proxmox_container.name
-        container.status = proxmox_container.status
-        container.cpu = proxmox_container.cpu
-        container.memory_mb = proxmox_container.memory_mb
-
-        if proxmox_container.disk_gb is not None:
-            container.disk_gb = proxmox_container.disk_gb
-
-        container.ip_address = proxmox_container.ip_address
-        container.image_name = proxmox_container.image_name
-        container.updated_at = datetime.now()
-
-
-    def _log_action(
-        self,
-        action: str,
-        container: Container,
-        started_at: float,
-        success: bool,
-        message: str,
-    ):
-
-        if not self.audit_log_service:
-            return
-
-        self.audit_log_service.log(
-            entity="container",
-            entity_id=container.id,
-            action=action,
-            details={
-                "container_number": container.container_number,
-                "duration_ms": round(
-                    (perf_counter() - started_at) * 1000,
-                    2,
-                ),
-                "success": success,
-                "message": message,
-                "status": container.status,
-            },
-        )
+    def _apply_network_configuration(self, container: Container, network: NetworkConfiguration):
+        self.network_service.apply_network_configuration(container, network)

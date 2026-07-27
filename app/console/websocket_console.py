@@ -87,7 +87,12 @@ async def websocket_console_endpoint(
         session.start()
 
         while True:
-            message = await websocket.receive_json()
+            try:
+                message = await asyncio.wait_for(websocket.receive_json(), timeout=1800)
+            except asyncio.TimeoutError:
+                logger.info(f"Sessão PTY inativa por 30 minutos. Encerrando console do container {container.name}...")
+                break
+
             msg_type = message.get("type")
 
             if msg_type == "input":
@@ -101,7 +106,6 @@ async def websocket_console_endpoint(
                 logger.warning(f"Unknown message type received: {msg_type}")
 
     except WebSocketDisconnect:
-        # Apenas logamos quando fechar
         logger.info(f"Conexão encerrada para console: user={user.username}, container={container.name}")
     except Exception as e:
         logger.error(f"Erro na conexão do console WebSocket: {e}", exc_info=True)

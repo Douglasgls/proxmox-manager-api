@@ -21,6 +21,7 @@ from app.api.websocket import router as websocket
 from app.api.access_tokens import router as access_tokens
 from app.api.cloud import router as cloud_router
 from app.console.websocket_console import router as console_router
+from app.console.console_manager import console_manager
 from app.core.exceptions import AuthenticationError, DomainValidationError
 from app.services.monitoring.tasks.adapter import metrics_collector
 from app.services.job_events import job_event_manager
@@ -39,21 +40,38 @@ async def lifespan(app: FastAPI):
     job_event_manager.loop = asyncio.get_running_loop()
     print(f"[Lifespan DEBUG] Registrou o event loop principal no job_event_manager: {job_event_manager.loop}")
     
-    try:
-        logger.info("Iniciando sincronização inicial dos containers com o Proxmox...")
-        with SessionLocal() as db:
-            service = ContainerService(
-                repository=ContainerRepository(db),
-                proxmox_client=ProxmoxClient(),
-            )
-            await asyncio.to_thread(service.sync_all)
-        logger.info("Sincronização inicial com o Proxmox concluída com sucesso.")
-    except Exception as exc:
-        logger.error(f"Erro durante a sincronização inicial com o Proxmox: {exc}", exc_info=True)
+    # 1. Reconciliação atômica de inicialização com Proxmox VE antes de notificar o Cloud
+    reconciliation_success = False
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info("Iniciando reconciliação inicial dos containers com Proxmox VE (tentativa %d/%d)...", attempt, max_retries)
+            with SessionLocal() as db:
+                service = ContainerService(
+                    repository=ContainerRepository(db),
+                    proxmox_client=ProxmoxClient(),
+                )
+                await asyncio.to_thread(service.sync_all)
+            reconciliation_success = True
+            logger.info("Reconciliação inicial com Proxmox VE concluída com sucesso.")
+            break
+        except Exception as exc:
+            logger.error("Erro na tentativa %d de reconciliação com Proxmox VE: %s", attempt, exc, exc_info=True)
+            if attempt < max_retries:
+                await asyncio.sleep(2)
 
+    app.state.is_reconciled = reconciliation_success
+
+    # 2. Iniciar métricas e gerenciador do Cloud após término garantido da reconciliação
     task = asyncio.create_task(metrics_collector.start())
+    logger.info("Iniciando conexão e sincronização com o Cloud Control Plane...")
     await cloud_manager.start()
+    
     yield
+
+    # Encerramento gracioso de serviços
+    logger.info("Encerrando serviços do Agent...")
+    console_manager.close_all_sessions()
     await cloud_manager.stop()
     await metrics_collector.stop()
     task.cancel()
