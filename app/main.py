@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+import logging
 from app.api.users import router as users
 from app.api.auth import router as auth
 from app.api.containers import router as containers
@@ -24,13 +25,32 @@ from app.core.exceptions import AuthenticationError, DomainValidationError
 from app.services.monitoring.tasks.adapter import metrics_collector
 from app.services.job_events import job_event_manager
 from app.cloud.manager import cloud_manager
+from app.database.session import SessionLocal
+from app.repositories.container_repository import ContainerRepository
+from app.integrations.proxmox import ProxmoxClient
+from app.services.container_service import ContainerService
 from fastapi.middleware.cors import CORSMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     job_event_manager.loop = asyncio.get_running_loop()
     print(f"[Lifespan DEBUG] Registrou o event loop principal no job_event_manager: {job_event_manager.loop}")
+    
+    try:
+        logger.info("Iniciando sincronização inicial dos containers com o Proxmox...")
+        with SessionLocal() as db:
+            service = ContainerService(
+                repository=ContainerRepository(db),
+                proxmox_client=ProxmoxClient(),
+            )
+            await asyncio.to_thread(service.sync_all)
+        logger.info("Sincronização inicial com o Proxmox concluída com sucesso.")
+    except Exception as exc:
+        logger.error(f"Erro durante a sincronização inicial com o Proxmox: {exc}", exc_info=True)
+
     task = asyncio.create_task(metrics_collector.start())
     await cloud_manager.start()
     yield

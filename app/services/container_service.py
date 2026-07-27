@@ -603,6 +603,20 @@ class ContainerService:
 
         return updated_container
 
+    def sync_all(self) -> list[Container]:
+        """Sincroniza o estado de runtime de todos os containers no banco com o Proxmox."""
+        containers = self.repository.list()
+        updated_containers = []
+        for container in containers:
+            try:
+                updated = self._sync_container_runtime(container)
+                updated_containers.append(updated)
+            except Exception as e:
+                logger.warning(
+                    f"Falha ao sincronizar container {container.id} (vmid: {container.container_number}): {e}"
+                )
+        return updated_containers
+
     def list(self):
 
         return (

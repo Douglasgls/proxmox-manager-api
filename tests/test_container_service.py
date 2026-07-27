@@ -186,3 +186,38 @@ class ContainerServiceTests(unittest.TestCase):
         self.assertEqual(container.status, "running")
         self.assertEqual(container.ip_address, "192.168.1.75")
         self.repository.update.assert_called_once()
+
+    def test_sync_all_success(self):
+        c1 = Container(id="uuid-1", container_number=101, status="stopped")
+        c2 = Container(id="uuid-2", container_number=102, status="stopped")
+        self.repository.list.return_value = [c1, c2]
+        self.repository.update.side_effect = lambda c: c
+
+        status1 = ContainerStatus(container_id=101, status="running", ip_address="10.0.0.1")
+        status2 = ContainerStatus(container_id=102, status="stopped", ip_address=None)
+        self.proxmox_client.get_container_status.side_effect = [status1, status2]
+
+        results = self.service.sync_all()
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(c1.status, "running")
+        self.assertEqual(c2.status, "stopped")
+
+    def test_sync_all_handles_exception_for_single_container(self):
+        c1 = Container(id="uuid-1", container_number=101, status="stopped")
+        c2 = Container(id="uuid-2", container_number=102, status="stopped")
+        self.repository.list.return_value = [c1, c2]
+        self.repository.update.side_effect = lambda c: c
+
+        status2 = ContainerStatus(container_id=102, status="running", ip_address="10.0.0.2")
+        self.proxmox_client.get_container_status.side_effect = [
+            RuntimeError("Proxmox unreachable for vmid 101"),
+            status2
+        ]
+
+        results = self.service.sync_all()
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].id, "uuid-2")
+        self.assertEqual(c2.status, "running")
+
