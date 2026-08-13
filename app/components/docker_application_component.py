@@ -9,9 +9,12 @@ from app.provision.step import ProvisionStep
 class DockerApplicationComponent(BaseComponent, ABC):
     """Classe base para componentes executados como aplicação Docker no container LXC."""
 
+    def __init__(self, config: dict[str, Any] | None = None):
+        self.config = config or {}
+
     @property
     def category(self) -> str:
-        return ComponentCategory.DOCKER_APPLICATION.value
+        return ComponentCategory.DOCKER_APPS.value
 
     @property
     @abstractmethod
@@ -24,14 +27,50 @@ class DockerApplicationComponent(BaseComponent, ABC):
         """Nome do container Docker."""
 
     @property
-    def ports(self) -> list[str]:
-        """Mapeamento de portas host:container. Padrão vazio se nenhuma porta for exposta."""
-        return []
+    def default_container_port(self) -> int:
+        return 80
+
+    @property
+    def default_host_port(self) -> int:
+        return 80
+
+    @property
+    def default_host(self) -> str:
+        return "0.0.0.0"
+
+    @property
+    def default_restart_policy(self) -> str:
+        return "unless-stopped"
+
+    @property
+    def container_port(self) -> int:
+        val = self.config.get("container_port", self.default_container_port)
+        return int(val)
+
+    @property
+    def host_port(self) -> int:
+        val = self.config.get("host_port", self.default_host_port)
+        return int(val)
+
+    @property
+    def host(self) -> str:
+        return str(self.config.get("host", self.default_host))
+
+    @property
+    def restart_policy(self) -> str:
+        return str(self.config.get("restart_policy", self.default_restart_policy))
+
+    def get_effective_config(self) -> dict[str, Any]:
+        """Retorna a configuração efetivamente utilizada nesta instância."""
+        return {
+            "host": self.host,
+            "host_port": self.host_port,
+            "container_port": self.container_port,
+            "restart_policy": self.restart_policy,
+        }
 
     def get_plan(self) -> ProvisionPlan:
-        port_flags = " ".join([f"-p {p}" for p in self.ports])
-        if port_flags:
-            port_flags = " " + port_flags
+        port_mapping = f"{self.host}:{self.host_port}:{self.container_port}"
 
         # 1. Garantir que o runtime Docker está instalado no LXC (idempotente)
         docker_install_cmd = (
@@ -57,12 +96,12 @@ class DockerApplicationComponent(BaseComponent, ABC):
             f"if docker ps -aq --filter \"name={self.container_name}\" | grep -q .; then "
             f"docker start {self.container_name}; "
             f"else "
-            f"docker run -d --name {self.container_name} --restart always{port_flags} {self.image}; "
+            f"docker run -d --name {self.container_name} --restart {self.restart_policy} -p {port_mapping} {self.image}; "
             f"fi; "
             f"fi"
         )
 
-        # 3. Validação do container da aplicação Docker (sem dependência de curl)
+        # 3. Validação do container da aplicação Docker
         app_validate_cmd = (
             f"docker ps --filter \"name={self.container_name}\" --filter \"status=running\" | grep -q {self.container_name} && "
             f"[ \"$(docker inspect -f '{{{{.State.Running}}}}' {self.container_name} 2>/dev/null)\" = \"true\" ]"

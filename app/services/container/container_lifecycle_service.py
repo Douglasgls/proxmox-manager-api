@@ -83,14 +83,6 @@ class ContainerLifecycleService:
         if existing:
             raise ValueError("Container já existe")
 
-        from app.models.component import ComponentCategory
-        needs_nesting = False
-        if resolved_components:
-            needs_nesting = any(
-                getattr(c, "category", None) == ComponentCategory.DOCKER_APPLICATION.value
-                for c in resolved_components
-            )
-
         proxmox_container = self.proxmox_client.create_container(
             name=name,
             cpu=cpu,
@@ -99,7 +91,7 @@ class ContainerLifecycleService:
             disk_gb=disk_gb,
             image_name=image_name,
             password=password,
-            nesting=needs_nesting,
+            nesting=True,
         )
         logger.info("Container created.")
         self._notify_lifecycle(lifecycle, "container_created", proxmox_container)

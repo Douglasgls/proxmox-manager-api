@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from app.components.base_components import BaseComponent
 from app.components.registry import ComponentRegistry
 from app.models.component import Component, ComponentCategory
@@ -36,11 +37,11 @@ DEFAULT_CATALOG_SEEDS = [
         "is_active": True,
     },
     {
-        "slug": "game",
-        "name": "Game",
-        "category": ComponentCategory.DOCKER_APPLICATION.value,
+        "slug": "filegator",
+        "name": "FileGator",
+        "category": ComponentCategory.DOCKER_APPS.value,
         "version": "latest",
-        "description": "Aplicação Web Game executada isoladamente via container Docker.",
+        "description": "Gerenciador de arquivos web executado via container Docker.",
         "is_default": True,
         "is_active": True,
     },
@@ -72,7 +73,6 @@ class ComponentService:
                 created = self.repository.create(component)
                 synced_components.append(created)
             else:
-                # Atualização idempotente de metadados se necessário
                 existing.name = seed["name"]
                 existing.category = seed["category"]
                 existing.version = seed["version"]
@@ -93,39 +93,79 @@ class ComponentService:
             raise ValueError(f"Componente com slug '{slug}' não foi encontrado no catálogo.")
         return component
 
-    def resolve_component_implementation(self, slug: str) -> BaseComponent:
+    def resolve_component_implementation(self, slug: str, config: dict[str, Any] | None = None) -> BaseComponent:
         """Resolve o slug persistido para a classe implementadora correspondente."""
-        return ComponentRegistry.get(slug)
+        return ComponentRegistry.get(slug, config=config)
 
-    def validate_and_resolve_slugs(self, slugs: list[str] | None) -> list[Component]:
-        """Valida e deduplica uma lista de slugs solicitados, retornando as entidades Component registradas."""
-        if not slugs:
+    def validate_and_resolve_slugs(self, items: list[str | dict[str, Any] | Any] | None) -> list[Component]:
+        """Valida, verifica conflitos de portas e resolve os componentes solicitados."""
+        if not items:
             return []
-
-        # Deduplica mantendo a ordem original de solicitação
-        unique_slugs = []
-        for s in slugs:
-            s_clean = s.strip().lower()
-            if s_clean and s_clean not in unique_slugs:
-                unique_slugs.append(s_clean)
-
-        resolved_components = []
-        invalid_slugs = []
 
         from app.core.exceptions import DomainValidationError
 
-        for slug in unique_slugs:
+        parsed_items: list[tuple[str, dict[str, Any]]] = []
+        seen_slugs: set[str] = set()
+
+        for item in items:
+            if isinstance(item, str):
+                slug = item.strip().lower()
+                cfg = {}
+            elif isinstance(item, dict):
+                slug = str(item.get("slug", "")).strip().lower()
+                cfg = item.get("config") or {}
+            elif hasattr(item, "slug"):
+                slug = str(item.slug).strip().lower()
+                raw_cfg = getattr(item, "config", None)
+                if hasattr(raw_cfg, "model_dump"):
+                    cfg = raw_cfg.model_dump()
+                elif isinstance(raw_cfg, dict):
+                    cfg = raw_cfg
+                else:
+                    cfg = {}
+            else:
+                continue
+
+            if not slug:
+                continue
+
+            parsed_items.append((slug, cfg))
+
+        resolved_components = []
+        invalid_slugs = []
+        used_ports: set[tuple[str, int]] = set()
+
+        for slug, cfg in parsed_items:
             comp = self.repository.get_by_slug(slug)
             if not comp or not comp.is_active:
                 invalid_slugs.append(slug)
                 continue
 
             try:
-                ComponentRegistry.get(slug)
+                impl = ComponentRegistry.get(slug, config=cfg)
             except Exception:
                 invalid_slugs.append(slug)
                 continue
 
+            # Validação de conflito de portas entre componentes docker_apps no mesmo container
+            if getattr(impl, "category", None) == ComponentCategory.DOCKER_APPS.value:
+                effective_cfg = getattr(impl, "get_effective_config", lambda: {})()
+                host = effective_cfg.get("host", "0.0.0.0")
+                host_port = effective_cfg.get("host_port", 80)
+                port_key = (host, host_port)
+
+                if port_key in used_ports:
+                    raise DomainValidationError(
+                        f"Conflito de porta detectado: a porta host {host_port} no bind address {host} já está atribuída a outro componente."
+                    )
+                used_ports.add(port_key)
+
+            if slug in seen_slugs:
+                continue
+            seen_slugs.add(slug)
+
+            # Anexa a configuração da requisição ao objeto Component temporário
+            comp._request_config = cfg
             resolved_components.append(comp)
 
         if invalid_slugs:
@@ -134,4 +174,3 @@ class ComponentService:
             )
 
         return resolved_components
-

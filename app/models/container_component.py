@@ -2,7 +2,7 @@ from enum import Enum
 from uuid import uuid4
 from datetime import datetime
 
-from sqlalchemy import String, Text, ForeignKey, UniqueConstraint, DateTime
+from sqlalchemy import String, Text, ForeignKey, UniqueConstraint, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -51,6 +51,11 @@ class ContainerComponent(Base):
 
     installed_version: Mapped[str | None] = mapped_column(
         String(50),
+        nullable=True,
+    )
+
+    config: Mapped[dict | None] = mapped_column(
+        JSON,
         nullable=True,
     )
 

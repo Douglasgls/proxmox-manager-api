@@ -10,6 +10,7 @@ class ContainerComponentResponseDTO(BaseModel):
     category: str
     status: str
     installed_version: str | None = None
+    config: dict | None = None
     error: str | None = None
     installed_at: datetime | None = None
 
@@ -56,6 +57,7 @@ class ContainerResponseDTO(BaseModel):
                     "category": item.component.category,
                     "status": item.status,
                     "installed_version": item.installed_version,
+                    "config": item.config,
                     "error": item.error,
                     "installed_at": item.installed_at,
                 })

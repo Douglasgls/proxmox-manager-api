@@ -10,7 +10,7 @@ from .base import Base
 
 class ComponentCategory(str, Enum):
     NATIVE = "native"
-    DOCKER_APPLICATION = "docker_application"
+    DOCKER_APPS = "docker_apps"
 
 
 class Component(Base):

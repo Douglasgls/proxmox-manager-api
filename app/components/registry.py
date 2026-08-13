@@ -1,13 +1,10 @@
+from typing import Any
 from app.components.base_components import BaseComponent
 from app.components.curl_component import CurlComponent
 from app.components.definition import ComponentDefinition
-from app.components.dummy_component import DummyComponent
-from app.components.EchoComponent import EchoComponent
 from app.components.git_component import GitComponent
 from app.components.tailscale_component import TailscaleComponent
-from app.components.game_component import GameComponent
-from app.components.programming.python import PythonComponent
-from app.components.database.mysql import MySQLComponent
+from app.components.filegator_component import FileGatorComponent
 
 
 class ComponentRegistry:
@@ -18,22 +15,22 @@ class ComponentRegistry:
         "curl": CurlComponent,
         "git": GitComponent,
         "tailscale": TailscaleComponent,
-        "python": PythonComponent,
-        # Docker application components
-        "game": GameComponent,
-        # Legacy / Outros componentes
-        "mysql": MySQLComponent,
-        "dummy": DummyComponent,
-        "echo": EchoComponent,
+        # Docker Application components
+        "filegator": FileGatorComponent,
     }
 
     @classmethod
     def get(
         cls,
         definition: ComponentDefinition | str,
+        config: dict[str, Any] | None = None,
     ) -> BaseComponent:
-        name = definition.name if isinstance(definition, ComponentDefinition) else definition
-        config = definition.config if isinstance(definition, ComponentDefinition) else {}
+        if isinstance(definition, ComponentDefinition):
+            name = definition.name
+            merged_config = definition.config or config
+        else:
+            name = definition
+            merged_config = config
 
         component_class = cls._components.get(name.lower())
 
@@ -42,7 +39,7 @@ class ComponentRegistry:
                 f"Component '{name}' not registered in ComponentRegistry."
             )
 
-        return component_class(config=config)
+        return component_class(config=merged_config)
 
     @classmethod
     def list_registered_slugs(cls) -> list[str]:

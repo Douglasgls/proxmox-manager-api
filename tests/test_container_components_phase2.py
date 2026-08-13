@@ -60,7 +60,6 @@ class TestPhase2ContainerComponents(unittest.TestCase):
         self.db.close()
 
     def test_legacy_payload_without_components_field(self):
-        # Payload sem a chave 'components'
         data = {"name": "c-legacy", "password": "pass"}
         dto = CreateContainerDTO.model_validate(data)
         self.assertEqual(dto.components, [])
@@ -106,10 +105,10 @@ class TestPhase2ContainerComponents(unittest.TestCase):
         self.assertEqual(records[0].installed_version, "1.0.0")
         self.assertIsNotNone(records[0].installed_at)
 
-    def test_provision_multiple_components_sequential(self):
+    def test_provision_docker_app_with_custom_config(self):
         container = Container(
             container_number=102,
-            name="c-multi",
+            name="c-filegator",
             password="pass",
             cpu=1,
             memory_mb=512,
@@ -121,16 +120,30 @@ class TestPhase2ContainerComponents(unittest.TestCase):
         mock_session = MagicMock(spec=ContainerSession)
         mock_session.exec.return_value = MagicMock(exit_code=0, stdout="OK", stderr="", success=True)
 
-        components = self.comp_service.validate_and_resolve_slugs(["curl", "git"])
+        req_items = [
+            {
+                "slug": "filegator",
+                "config": {
+                    "host": "0.0.0.0",
+                    "host_port": 8990,
+                    "container_port": 80,
+                    "restart_policy": "unless-stopped",
+                }
+            }
+        ]
+        components = self.comp_service.validate_and_resolve_slugs(req_items)
         records = self.container_comp_service.provision_container_components(
             container=container,
             components=components,
             session=mock_session,
         )
 
-        self.assertEqual(len(records), 2)
+        self.assertEqual(len(records), 1)
         self.assertEqual(records[0].status, ContainerComponentStatus.INSTALLED.value)
-        self.assertEqual(records[1].status, ContainerComponentStatus.INSTALLED.value)
+        self.assertIsNotNone(records[0].config)
+        self.assertEqual(records[0].config["host_port"], 8990)
+        self.assertEqual(records[0].config["container_port"], 80)
+        self.assertEqual(records[0].config["host"], "0.0.0.0")
 
     def test_partial_failure_preserves_exact_state(self):
         container = Container(
@@ -145,8 +158,6 @@ class TestPhase2ContainerComponents(unittest.TestCase):
         container = self.container_repo.create(container)
 
         mock_session = MagicMock(spec=ContainerSession)
-        # Primeiro componente (curl) é executado e sucede
-        # Segundo componente (git) falha
         def mock_exec(cmd, timeout=300):
             if "git" in cmd:
                 return MagicMock(exit_code=1, stdout="", stderr="apt-get install git failed", success=False)
@@ -154,9 +165,8 @@ class TestPhase2ContainerComponents(unittest.TestCase):
 
         mock_session.exec.side_effect = mock_exec
 
-        components = self.comp_service.validate_and_resolve_slugs(["curl", "git", "game"])
+        components = self.comp_service.validate_and_resolve_slugs(["curl", "git", "filegator"])
         
-        # Cria registros PENDING iniciais
         self.container_comp_service.create_pending_records(container.id, components)
 
         records = self.container_comp_service.provision_container_components(
@@ -171,7 +181,7 @@ class TestPhase2ContainerComponents(unittest.TestCase):
         status_map = {r.component.slug: r.status for r in all_db_records}
         self.assertEqual(status_map["curl"], ContainerComponentStatus.INSTALLED.value)
         self.assertEqual(status_map["git"], ContainerComponentStatus.FAILED.value)
-        self.assertEqual(status_map["game"], ContainerComponentStatus.PENDING.value)
+        self.assertEqual(status_map["filegator"], ContainerComponentStatus.PENDING.value)
 
     def test_container_response_dto_serialization(self):
         container = Container(
@@ -184,25 +194,25 @@ class TestPhase2ContainerComponents(unittest.TestCase):
             status="running",
         )
         container = self.container_repo.create(container)
-        git_comp = self.comp_repo.get_by_slug("git")
+        fg_comp = self.comp_repo.get_by_slug("filegator")
 
         cc = ContainerComponent(
             container_id=container.id,
-            component_id=git_comp.id,
+            component_id=fg_comp.id,
             status=ContainerComponentStatus.INSTALLED.value,
-            installed_version="1.0.0",
+            installed_version="latest",
+            config={"host": "0.0.0.0", "host_port": 8990, "container_port": 80},
             installed_at=datetime.now(),
         )
         self.container_comp_repo.create(cc)
 
-        # Recarrega o container com o relacionamento
         reloaded = self.container_repo.get(container.id)
         dto = ContainerResponseDTO.model_validate(reloaded)
 
         self.assertEqual(len(dto.components), 1)
-        self.assertEqual(dto.components[0].slug, "git")
+        self.assertEqual(dto.components[0].slug, "filegator")
         self.assertEqual(dto.components[0].status, "INSTALLED")
-        self.assertEqual(dto.components[0].installed_version, "1.0.0")
+        self.assertEqual(dto.components[0].config["host_port"], 8990)
 
 
 class TestPhase2API(unittest.TestCase):
@@ -254,12 +264,18 @@ class TestPhase2API(unittest.TestCase):
         container = ContainerRepository(self.db).create(container)
 
         payload = {
-            "components": ["git", "game"]
+            "components": [
+                "git",
+                {
+                    "slug": "filegator",
+                    "config": {
+                        "host": "0.0.0.0",
+                        "host_port": 8990,
+                        "container_port": 80
+                    }
+                }
+            ]
         }
-        response = self.client.post(f"/containers/{container.id}/components", json=payload)
-        self.assertEqual(response.status_code, 202)
-        data = response.json()
-        self.assertIn("job_id", data)
         response = self.client.post(f"/containers/{container.id}/components", json=payload)
         self.assertEqual(response.status_code, 202)
         data = response.json()

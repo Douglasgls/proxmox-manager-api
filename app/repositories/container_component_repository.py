@@ -35,15 +35,20 @@ class ContainerComponentRepository(BaseRepository[ContainerComponent]):
         self,
         container_id: str,
         component_id: str,
+        config: dict | None = None,
     ) -> ContainerComponent:
         existing = self.get_by_container_and_component(container_id, component_id)
         if existing:
+            if config is not None:
+                existing.config = config
+                return self.update(existing)
             return existing
 
         entity = ContainerComponent(
             container_id=container_id,
             component_id=component_id,
             status=ContainerComponentStatus.PENDING.value,
+            config=config,
         )
         return self.create(entity)
 
@@ -53,9 +58,12 @@ class ContainerComponentRepository(BaseRepository[ContainerComponent]):
         status: str,
         error: str | None = None,
         installed_version: str | None = None,
+        config: dict | None = None,
     ) -> ContainerComponent:
         container_component.status = status
         container_component.updated_at = datetime.now()
+        if config is not None:
+            container_component.config = config
 
         if status == ContainerComponentStatus.INSTALLED.value:
             container_component.installed_at = datetime.now()

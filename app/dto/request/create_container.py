@@ -1,5 +1,39 @@
-from pydantic import BaseModel
-from pydantic import Field
+from typing import Any
+from pydantic import BaseModel, Field, field_validator
+
+
+class ComponentConfigDTO(BaseModel):
+    host: str = "0.0.0.0"
+    host_port: int = 80
+    container_port: int = 80
+    restart_policy: str = "unless-stopped"
+
+    @field_validator("host")
+    @classmethod
+    def validate_host(cls, v: str) -> str:
+        if v not in ("0.0.0.0", "127.0.0.1"):
+            raise ValueError("O endereço de bind (host) deve ser '0.0.0.0' ou '127.0.0.1'.")
+        return v
+
+    @field_validator("host_port", "container_port")
+    @classmethod
+    def validate_port(cls, v: int) -> int:
+        if not (1 <= v <= 65535):
+            raise ValueError("A porta deve estar entre 1 e 65535.")
+        return v
+
+    @field_validator("restart_policy")
+    @classmethod
+    def validate_restart_policy(cls, v: str) -> str:
+        valid_policies = ("no", "unless-stopped", "always")
+        if v not in valid_policies:
+            raise ValueError(f"A política de restart deve ser uma das seguintes: {', '.join(valid_policies)}.")
+        return v
+
+
+class ComponentRequestItemDTO(BaseModel):
+    slug: str
+    config: ComponentConfigDTO | dict[str, Any] | None = None
 
 
 class CreateContainerDTO(BaseModel):
@@ -34,12 +68,12 @@ class CreateContainerDTO(BaseModel):
 
     mac_address: str | None = None
 
-    components: list[str] = Field(
+    components: list[str | ComponentRequestItemDTO | dict[str, Any]] = Field(
         default_factory=list
     )
 
 
 class InstallContainerComponentsDTO(BaseModel):
-    components: list[str] = Field(
+    components: list[str | ComponentRequestItemDTO | dict[str, Any]] = Field(
         default_factory=list
     )

@@ -30,9 +30,11 @@ class ContainerComponentService:
         """Cria os registros iniciais com status PENDING na tabela container_components."""
         records = []
         for comp in components:
+            cfg = getattr(comp, "_request_config", None)
             record = self.repository.create_pending_record(
                 container_id=container_id,
                 component_id=comp.id,
+                config=cfg,
             )
             records.append(record)
         return records
@@ -53,6 +55,7 @@ class ContainerComponentService:
         results = []
 
         for comp in components:
+            request_cfg = getattr(comp, "_request_config", None)
             record = self.repository.get_by_container_and_component(
                 container_id=container.id,
                 component_id=comp.id,
@@ -61,6 +64,7 @@ class ContainerComponentService:
                 record = self.repository.create_pending_record(
                     container_id=container.id,
                     component_id=comp.id,
+                    config=request_cfg,
                 )
 
             logger.info(
@@ -74,10 +78,11 @@ class ContainerComponentService:
             record = self.repository.update_status(
                 container_component=record,
                 status=ContainerComponentStatus.INSTALLING.value,
+                config=request_cfg,
             )
 
             try:
-                impl = ComponentRegistry.get(comp.slug)
+                impl = ComponentRegistry.get(comp.slug, config=request_cfg)
                 plan = impl.get_plan()
 
                 provision_result = self.provision_engine.execute(
@@ -91,6 +96,7 @@ class ContainerComponentService:
 
                 if provision_result.success:
                     installed_version = impl.metadata().get("version")
+                    effective_config = getattr(impl, "get_effective_config", lambda: request_cfg)()
                     logger.info(
                         "Componente %s instalado com sucesso no container %s (versão: %s)",
                         comp.slug,
@@ -101,6 +107,7 @@ class ContainerComponentService:
                         container_component=record,
                         status=ContainerComponentStatus.INSTALLED.value,
                         installed_version=installed_version,
+                        config=effective_config,
                     )
                     results.append(record)
                 else:
@@ -117,7 +124,6 @@ class ContainerComponentService:
                         error=error_msg,
                     )
                     results.append(record)
-                    # Interrompe o provisionamento dos subsequentes mantendo os anteriores intactos
                     break
 
             except Exception as exc:
