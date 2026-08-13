@@ -12,14 +12,14 @@ class TailscaleComponent(NativeComponent):
             component_name=self.name,
             install_commands=[
                 "export DEBIAN_FRONTEND=noninteractive && "
-                "apt-get -o Acquire::Check-Valid-Until=false update && "
+                "apt-get update && "
                 "apt-get install -y --no-install-recommends ca-certificates curl gnupg && "
                 "install -d -m 0755 /usr/share/keyrings && "
                 "curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg "
                 "-o /usr/share/keyrings/tailscale-archive-keyring.gpg && "
                 "curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.tailscale-keyring.list "
                 "-o /etc/apt/sources.list.d/tailscale.list && "
-                "apt-get -o Acquire::Check-Valid-Until=false update && "
+                "apt-get update && "
                 "apt-get install -y --no-install-recommends tailscale"
             ],
             validation_commands=[

@@ -10,7 +10,7 @@ class GitComponent(NativeComponent):
         step = ProvisionStep(
             component_name=self.name,
             install_commands=[
-                "apt-get -o Acquire::Check-Valid-Until=false update",
+                "apt-get update",
                 "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git",
             ],
             validation_commands=[
