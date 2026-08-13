@@ -37,3 +37,9 @@ class CreateContainerDTO(BaseModel):
     components: list[str] = Field(
         default_factory=list
     )
+
+
+class InstallContainerComponentsDTO(BaseModel):
+    components: list[str] = Field(
+        default_factory=list
+    )

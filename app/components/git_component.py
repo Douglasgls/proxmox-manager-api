@@ -1,61 +1,31 @@
-from app.components.base_components import BaseComponent
+from typing import Any
+from app.components.native_component import NativeComponent
+from app.provision.plan import ProvisionPlan
+from app.provision.step import ProvisionStep
 
 
+class GitComponent(NativeComponent):
 
-
-class GitComponent(BaseComponent):
-
-    @property
-    def name(self):
-        return "git"
-
-    def install(self, session):
-
-        result = session.exec(
-            "export DEBIAN_FRONTEND=noninteractive && "
-            "apt-get update && "
-            "apt-get install -y --no-install-recommends git",
-            timeout=180,
+    def get_plan(self) -> ProvisionPlan:
+        step = ProvisionStep(
+            component_name=self.name,
+            install_commands=[
+                "apt-get update",
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git",
+            ],
+            validation_commands=[
+                "git --version"
+            ],
+        )
+        return ProvisionPlan(
+            name="Git Provision Plan",
+            description="Plano de instalação do Git",
+            steps=[step],
         )
 
-        if result.exit_code != 0:
-            raise Exception(
-                f"Erro instalando git:\n"
-                f"stdout:\n{result.stdout}\n\n"
-                f"stderr:\n{result.stderr}"
-            )
-
-        return "Git instalado."
-
-    def validate(self, session):
-
-        result = session.exec(
-            "git --version",
-            timeout=180,
-        )
-
-        if result.exit_code != 0:
-            raise Exception(
-                f"Git validation failed:\n"
-                f"stdout:\n{result.stdout}\n\n"
-                f"stderr:\n{result.stderr}"
-            )
-
-        return "Git validado."
-
-    def metadata(self):
+    def metadata(self) -> dict[str, Any]:
         return {
-            "name": self.name,
+            "name": "git",
             "description": "Instala o Git no sistema.",
             "version": "1.0.0",
         }
-
-    def rollback(self, session):
-
-        session.exec(
-            "export DEBIAN_FRONTEND=noninteractive && "
-            "apt-get remove -y git"
-        )
-
-    def execute(self, session):
-        pass

@@ -7,6 +7,9 @@ from app.services.container_service import ContainerService
 from app.services.job_service import JobService
 
 
+from app.services.component_service import ComponentService
+from app.services.container_component_service import ContainerComponentService
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,9 +19,13 @@ class ContainerCreationWorkflow:
         self,
         container_service: ContainerService,
         job_service: JobService,
+        component_service: ComponentService | None = None,
+        container_component_service: ContainerComponentService | None = None,
     ):
         self.container_service = container_service
         self.job_service = job_service
+        self.component_service = component_service
+        self.container_component_service = container_component_service
 
     def create_job(self):
         return self.job_service.create(
@@ -37,8 +44,13 @@ class ContainerCreationWorkflow:
                 job_id
             )
 
+            resolved_components = []
+            if dto.components and self.component_service:
+                resolved_components = self.component_service.validate_and_resolve_slugs(dto.components)
+
             plan = self._build_provision_plan(
-                dto
+                dto,
+                resolved_components,
             )
             lifecycle_callbacks = self._build_lifecycle_callbacks(
                 job_id=job_id,
@@ -68,6 +80,7 @@ class ContainerCreationWorkflow:
                 lifecycle_callbacks=lifecycle_callbacks,
                 provision_callbacks=callbacks,
                 created_by=created_by,
+                resolved_components=resolved_components,
             )
 
             self.job_service.finish(
@@ -88,11 +101,13 @@ class ContainerCreationWorkflow:
     def _build_provision_plan(
         self,
         dto: CreateContainerDTO,
+        resolved_components: list | None = None,
     ) -> ProvisionPlan:
 
         components = []
-        for component in dto.components:
-            components.append(ComponentDefinition(name=component))
+        if not resolved_components:
+            for component in dto.components:
+                components.append(ComponentDefinition(name=component))
 
         return ProvisionPlan(
             id="default",
