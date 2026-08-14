@@ -5,6 +5,11 @@ from app.components.definition import ComponentDefinition
 from app.components.git_component import GitComponent
 from app.components.tailscale_component import TailscaleComponent
 from app.components.filegator_component import FileGatorComponent
+from app.components.uptime_kuma_component import UptimeKumaComponent
+from app.components.postgresql_component import PostgresqlComponent
+from app.components.redis_component import RedisComponent
+from app.components.mariadb_component import MariadbComponent
+from app.components.jellyfin_component import JellyfinComponent
 
 
 class ComponentRegistry:
@@ -17,6 +22,11 @@ class ComponentRegistry:
         "tailscale": TailscaleComponent,
         # Docker Application components
         "filegator": FileGatorComponent,
+        "uptime-kuma": UptimeKumaComponent,
+        "postgresql": PostgresqlComponent,
+        "redis": RedisComponent,
+        "mariadb": MariadbComponent,
+        "jellyfin": JellyfinComponent,
     }
 
     @classmethod

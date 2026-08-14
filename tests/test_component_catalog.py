@@ -168,17 +168,22 @@ class TestComponentServiceAndRepository(unittest.TestCase):
 
     def test_sync_default_catalog_is_idempotent(self):
         synced_1 = self.service.sync_default_catalog()
-        self.assertEqual(len(synced_1), 4)
+        self.assertEqual(len(synced_1), 9)
 
         slugs = [c.slug for c in self.service.list_components()]
         self.assertIn("curl", slugs)
         self.assertIn("git", slugs)
         self.assertIn("tailscale", slugs)
         self.assertIn("filegator", slugs)
+        self.assertIn("uptime-kuma", slugs)
+        self.assertIn("postgresql", slugs)
+        self.assertIn("redis", slugs)
+        self.assertIn("mariadb", slugs)
+        self.assertIn("jellyfin", slugs)
         self.assertNotIn("python", slugs)
 
         synced_2 = self.service.sync_default_catalog()
-        self.assertEqual(len(synced_2), 4)
+        self.assertEqual(len(synced_2), 9)
 
     def test_list_by_category(self):
         self.service.sync_default_catalog()
@@ -186,8 +191,7 @@ class TestComponentServiceAndRepository(unittest.TestCase):
         self.assertEqual(len(native_components), 3)
 
         docker_components = self.service.list_components(category="docker_apps")
-        self.assertEqual(len(docker_components), 1)
-        self.assertEqual(docker_components[0].slug, "filegator")
+        self.assertEqual(len(docker_components), 6)
 
     def test_port_conflict_validation(self):
         self.service.sync_default_catalog()
@@ -218,8 +222,9 @@ class TestComponentsAPI(unittest.TestCase):
         mock_user.id = "user-123"
         app.dependency_overrides[get_current_user] = lambda: mock_user
 
-        from app.core.dependencies import get_db
+        from app.core.dependencies import get_db, get_component_service
         app.dependency_overrides[get_db] = lambda: self.db
+        app.dependency_overrides[get_component_service] = lambda: ComponentService(ComponentRepository(self.db))
 
         self.client = TestClient(app)
 
@@ -231,14 +236,13 @@ class TestComponentsAPI(unittest.TestCase):
         response = self.client.get("/components")
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(len(data), 4)
+        self.assertEqual(len(data), 9)
 
     def test_get_components_by_category(self):
         response = self.client.get("/components?category=docker_apps")
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["slug"], "filegator")
+        self.assertEqual(len(data), 6)
 
     def test_get_component_by_slug(self):
         response = self.client.get("/components/filegator")

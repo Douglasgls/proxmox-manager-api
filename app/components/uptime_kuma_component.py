@@ -2,66 +2,66 @@ from typing import Any
 from app.components.docker_application_component import DockerApplicationComponent
 
 
-class FileGatorComponent(DockerApplicationComponent):
-    """Componente de aplicação Docker para o FileGator."""
+class UptimeKumaComponent(DockerApplicationComponent):
+    """Componente de aplicação Docker para o Uptime Kuma (Monitoramento)."""
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config=config)
 
     @property
     def name(self) -> str:
-        return "FileGator"
+        return "Uptime Kuma"
 
     @property
     def slug(self) -> str:
-        return "filegator"
+        return "uptime-kuma"
 
     @property
     def image(self) -> str:
-        return "filegator/filegator"
+        return "louislam/uptime-kuma:1"
 
     @property
     def container_name(self) -> str:
-        return "filegator-app"
+        return "uptime-kuma-app"
 
     @property
     def default_container_port(self) -> int:
-        return 8080
+        return 3001
 
     @property
     def default_host_port(self) -> int:
-        return 8080
+        return 3001
 
     @property
-    def default_host(self) -> str:
-        return "0.0.0.0"
+    def is_web_app(self) -> bool:
+        return True
 
     @property
-    def default_restart_policy(self) -> str:
-        return "unless-stopped"
+    def protocol(self) -> str:
+        return "http"
 
     @property
     def description(self) -> str:
-        return "Navegador e gerenciador de arquivos web executado via container Docker."
+        return "Ferramenta autohospedada de monitoramento de serviços e sites com belo painel de status."
 
     @property
     def website_url(self) -> str | None:
-        return "https://filegator.io"
+        return "https://uptime.kuma.pet"
 
     @property
     def documentation_url(self) -> str | None:
-        return "https://filegator.io/docs"
+        return "https://github.com/louislam/uptime-kuma"
 
     @property
     def default_volumes(self) -> list[str]:
-        return ["filegator-storage:/var/www/filegator/repository"]
+        return ["uptime-kuma-data:/app/data"]
 
     @property
     def volumes_schema(self) -> list[dict[str, Any]]:
         return [
             {
-                "name": "filegator-storage",
-                "mount_path": "/var/www/filegator/repository",
-                "description": "Repositório persistente de arquivos do FileGator",
+                "name": "uptime-kuma-data",
+                "mount_path": "/app/data",
+                "description": "Persistência de banco de dados SQLite, monitores e status do Uptime Kuma",
             }
         ]
