@@ -67,6 +67,7 @@ class ContainerCreationWorkflow:
                 memory_mb=dto.memory_mb,
                 disk_gb=dto.disk_gb,
                 image_name=dto.image_name,
+                storage=dto.storage,
                 bridge=dto.bridge,
                 ip_mode=dto.ip_mode,
                 ip_address=dto.ip_address,

@@ -50,6 +50,8 @@ class CreateContainerDTO(BaseModel):
 
     image_name: str | None = None
 
+    storage: str | None = None
+
     bridge: str = "vmbr0"
 
     ip_mode: str = "dhcp"

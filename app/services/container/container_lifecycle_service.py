@@ -49,6 +49,7 @@ class ContainerLifecycleService:
         memory_mb: int,
         disk_gb: int = 2,
         image_name: str | None = None,
+        storage: str | None = None,
         bridge: str = "vmbr0",
         ip_mode: str = "dhcp",
         ip_address: str | None = None,
@@ -91,6 +92,7 @@ class ContainerLifecycleService:
             disk_gb=disk_gb,
             image_name=image_name,
             password=password,
+            storage=storage,
             nesting=True,
         )
         logger.info("Container created.")
