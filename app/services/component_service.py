@@ -113,14 +113,18 @@ class ComponentService:
                 cfg = {}
             elif isinstance(item, dict):
                 slug = str(item.get("slug", "")).strip().lower()
-                cfg = item.get("config") or {}
+                raw_cfg = item.get("config") or {}
+                if isinstance(raw_cfg, dict):
+                    cfg = {k: v for k, v in raw_cfg.items() if v is not None}
+                else:
+                    cfg = {}
             elif hasattr(item, "slug"):
                 slug = str(item.slug).strip().lower()
                 raw_cfg = getattr(item, "config", None)
                 if hasattr(raw_cfg, "model_dump"):
-                    cfg = raw_cfg.model_dump()
+                    cfg = raw_cfg.model_dump(exclude_none=True)
                 elif isinstance(raw_cfg, dict):
-                    cfg = raw_cfg
+                    cfg = {k: v for k, v in raw_cfg.items() if v is not None}
                 else:
                     cfg = {}
             else:
@@ -151,14 +155,15 @@ class ComponentService:
             if getattr(impl, "category", None) == ComponentCategory.DOCKER_APPS.value:
                 effective_cfg = getattr(impl, "get_effective_config", lambda: {})()
                 host = effective_cfg.get("host", "0.0.0.0")
-                host_port = effective_cfg.get("host_port", 80)
-                port_key = (host, host_port)
+                host_port = effective_cfg.get("host_port") or getattr(impl, "host_port", None)
+                if host_port is not None:
+                    port_key = (host, host_port)
 
-                if port_key in used_ports:
-                    raise DomainValidationError(
-                        f"Conflito de porta detectado: a porta host {host_port} no bind address {host} já está atribuída a outro componente."
-                    )
-                used_ports.add(port_key)
+                    if port_key in used_ports:
+                        raise DomainValidationError(
+                            f"Conflito de porta detectado: a porta host {host_port} no bind address {host} já está atribuída a outro componente."
+                        )
+                    used_ports.add(port_key)
 
             if slug in seen_slugs:
                 continue

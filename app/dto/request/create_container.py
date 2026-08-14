@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field, field_validator
 
 class ComponentConfigDTO(BaseModel):
     host: str = "0.0.0.0"
-    host_port: int = 80
-    container_port: int = 80
+    host_port: int | None = None
+    container_port: int | None = None
     restart_policy: str = "unless-stopped"
 
     @field_validator("host")
@@ -17,8 +17,8 @@ class ComponentConfigDTO(BaseModel):
 
     @field_validator("host_port", "container_port")
     @classmethod
-    def validate_port(cls, v: int) -> int:
-        if not (1 <= v <= 65535):
+    def validate_port(cls, v: int | None) -> int | None:
+        if v is not None and not (1 <= v <= 65535):
             raise ValueError("A porta deve estar entre 1 e 65535.")
         return v
 

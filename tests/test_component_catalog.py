@@ -115,7 +115,6 @@ class TestComponentHierarchyAndDeclarations(unittest.TestCase):
         with self.assertRaises(ValueError):
             _ = app_no_port.container_port
 
-
 class TestComponentRegistry(unittest.TestCase):
 
     def test_resolve_registered_slugs(self):
@@ -140,8 +139,29 @@ class TestComponentServiceAndRepository(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine)
         self.db = self.SessionLocal()
-        self.repository = ComponentRepository(self.db)
-        self.service = ComponentService(self.repository)
+        self.repo = ComponentRepository(self.db)
+        self.service = ComponentService(self.repo)
+        self.service.sync_default_catalog()
+
+    def test_dto_parsing_preserves_template_default_container_port(self):
+        from app.dto.request.create_container import ComponentRequestItemDTO, ComponentConfigDTO
+
+        # Simula DTO recebido da requisição HTTP quando o usuário especifica apenas host_port: 8095
+        dto_item = ComponentRequestItemDTO(
+            slug="filegator",
+            config=ComponentConfigDTO(host_port=8095)
+        )
+
+        resolved = self.service.validate_and_resolve_slugs([dto_item])
+        self.assertEqual(len(resolved), 1)
+
+        impl = ComponentRegistry.get("filegator", config=getattr(resolved[0], "_request_config", {}))
+        self.assertEqual(impl.host_port, 8095)
+        self.assertEqual(impl.container_port, 8080)
+
+        plan = impl.get_plan()
+        step = plan.steps[0]
+        self.assertIn("-p 0.0.0.0:8095:8080", step.install_commands[1])
 
     def tearDown(self):
         self.db.close()
