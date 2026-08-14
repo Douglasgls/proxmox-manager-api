@@ -1,12 +1,17 @@
 from typing import Any
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ComponentConfigDTO(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     host: str = "0.0.0.0"
     host_port: int | None = None
     container_port: int | None = None
     restart_policy: str = "unless-stopped"
+    env: dict[str, Any] | None = None
+    env_vars: dict[str, Any] | None = None
+    volumes: list[Any] | dict[str, Any] | None = None
 
     @field_validator("host")
     @classmethod

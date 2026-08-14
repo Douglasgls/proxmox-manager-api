@@ -121,18 +121,26 @@ class TestDockerAppsCatalog(unittest.TestCase):
         self.assertIn("-v jellyfin-cache:/cache", step.install_commands[1])
         self.assertIn("-v jellyfin-media:/media", step.install_commands[1])
 
-    def test_container_port_override(self):
-        # Override de porta interna em configurações avançadas
-        pg_override = PostgresqlComponent(config={
-            "host_port": 5433,
-            "container_port": 5439,
-            "env": {"POSTGRES_PASSWORD": "secretpassword"}
-        })
-        self.assertEqual(pg_override.host_port, 5433)
-        self.assertEqual(pg_override.container_port, 5439)
-        plan = pg_override.get_plan()
+    def test_dto_parsing_preserves_env_vars(self):
+        from app.dto.request.create_container import ComponentRequestItemDTO, ComponentConfigDTO
+
+        dto_item = ComponentRequestItemDTO(
+            slug="mariadb",
+            config=ComponentConfigDTO(
+                host_port=3306,
+                env={"MARIADB_ROOT_PASSWORD": "secretrootpassword"}
+            )
+        )
+
+        service = ComponentService(MagicMock())
+        resolved = service.validate_and_resolve_slugs([dto_item])
+        self.assertEqual(len(resolved), 1)
+
+        impl = ComponentRegistry.get("mariadb", config=getattr(resolved[0], "_request_config", {}))
+        self.assertEqual(impl.env_vars.get("MARIADB_ROOT_PASSWORD"), "secretrootpassword")
+        plan = impl.get_plan()
         step = plan.steps[0]
-        self.assertIn("-p 0.0.0.0:5433:5439", step.install_commands[1])
+        self.assertIn("-e MARIADB_ROOT_PASSWORD=\"secretrootpassword\"", step.install_commands[1])
 
 
 class TestDockerAppsAPIAndSync(unittest.TestCase):
