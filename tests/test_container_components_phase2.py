@@ -126,7 +126,7 @@ class TestPhase2ContainerComponents(unittest.TestCase):
                 "config": {
                     "host": "0.0.0.0",
                     "host_port": 8990,
-                    "container_port": 80,
+                    "container_port": 8080,
                     "restart_policy": "unless-stopped",
                 }
             }
@@ -142,7 +142,7 @@ class TestPhase2ContainerComponents(unittest.TestCase):
         self.assertEqual(records[0].status, ContainerComponentStatus.INSTALLED.value)
         self.assertIsNotNone(records[0].config)
         self.assertEqual(records[0].config["host_port"], 8990)
-        self.assertEqual(records[0].config["container_port"], 80)
+        self.assertEqual(records[0].config["container_port"], 8080)
         self.assertEqual(records[0].config["host"], "0.0.0.0")
 
     def test_partial_failure_preserves_exact_state(self):
@@ -201,7 +201,7 @@ class TestPhase2ContainerComponents(unittest.TestCase):
             component_id=fg_comp.id,
             status=ContainerComponentStatus.INSTALLED.value,
             installed_version="latest",
-            config={"host": "0.0.0.0", "host_port": 8990, "container_port": 80},
+            config={"host": "0.0.0.0", "host_port": 8990, "container_port": 8080},
             installed_at=datetime.now(),
         )
         self.container_comp_repo.create(cc)
@@ -271,7 +271,7 @@ class TestPhase2API(unittest.TestCase):
                     "config": {
                         "host": "0.0.0.0",
                         "host_port": 8990,
-                        "container_port": 80
+                        "container_port": 8080
                     }
                 }
             ]

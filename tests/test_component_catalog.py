@@ -57,7 +57,7 @@ class TestComponentHierarchyAndDeclarations(unittest.TestCase):
         fg = FileGatorComponent(config={
             "host": "0.0.0.0",
             "host_port": 8990,
-            "container_port": 80,
+            "container_port": 9000,
             "restart_policy": "unless-stopped",
         })
         plan = fg.get_plan()
@@ -69,12 +69,51 @@ class TestComponentHierarchyAndDeclarations(unittest.TestCase):
         self.assertEqual(len(step.install_commands), 2)
         self.assertIn("command -v docker", step.install_commands[0])
         self.assertIn("filegator/filegator", step.install_commands[1])
-        self.assertIn("-p 0.0.0.0:8990:80", step.install_commands[1])
+        self.assertIn("-p 0.0.0.0:8990:9000", step.install_commands[1])
         self.assertIn("--restart unless-stopped", step.install_commands[1])
 
         self.assertEqual(len(step.validation_commands), 2)
         self.assertIn("docker info", step.validation_commands[0])
         self.assertIn("docker inspect", step.validation_commands[1])
+
+    def test_filegator_uses_template_default_port_8080(self):
+        fg = FileGatorComponent(config={
+            "host_port": 8011,
+        })
+        self.assertEqual(fg.container_port, 8080)
+        self.assertEqual(fg.host_port, 8011)
+        plan = fg.get_plan()
+        step = plan.steps[0]
+        self.assertIn("-p 0.0.0.0:8011:8080", step.install_commands[1])
+
+    def test_docker_app_without_default_container_port_raises_error(self):
+        class DummyDockerApp(DockerApplicationComponent):
+            @property
+            def name(self) -> str:
+                return "DummyApp"
+
+            @property
+            def slug(self) -> str:
+                return "dummy"
+
+            @property
+            def image(self) -> str:
+                return "dummy/dummy"
+
+            @property
+            def container_name(self) -> str:
+                return "dummy-app"
+
+            @property
+            def default_container_port(self) -> int:
+                return None
+
+            def metadata(self):
+                return {}
+
+        app_no_port = DummyDockerApp()
+        with self.assertRaises(ValueError):
+            _ = app_no_port.container_port
 
 
 class TestComponentRegistry(unittest.TestCase):

@@ -26,11 +26,11 @@ class FileGatorComponent(DockerApplicationComponent):
 
     @property
     def default_container_port(self) -> int:
-        return 80
+        return 8080
 
     @property
     def default_host_port(self) -> int:
-        return 80
+        return 8080
 
     @property
     def default_host(self) -> str:

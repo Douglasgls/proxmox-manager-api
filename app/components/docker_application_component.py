@@ -27,12 +27,13 @@ class DockerApplicationComponent(BaseComponent, ABC):
         """Nome do container Docker."""
 
     @property
+    @abstractmethod
     def default_container_port(self) -> int:
-        return 80
+        """Porta interna padrão exposta pela aplicação no container Docker."""
 
     @property
     def default_host_port(self) -> int:
-        return 80
+        return self.default_container_port
 
     @property
     def default_host(self) -> str:
@@ -44,8 +45,27 @@ class DockerApplicationComponent(BaseComponent, ABC):
 
     @property
     def container_port(self) -> int:
-        val = self.config.get("container_port", self.default_container_port)
-        return int(val)
+        user_val = self.config.get("container_port")
+        if user_val is not None:
+            try:
+                port = int(user_val)
+                if 1 <= port <= 65535:
+                    return port
+            except (ValueError, TypeError):
+                pass
+
+        try:
+            default_port = self.default_container_port
+            if default_port is not None:
+                port = int(default_port)
+                if 1 <= port <= 65535:
+                    return port
+        except (ValueError, TypeError, NotImplementedError):
+            pass
+
+        raise ValueError(
+            f"Porta interna do container (container_port) não definida para a aplicação Docker '{getattr(self, 'name', 'desconhecida')}'."
+        )
 
     @property
     def host_port(self) -> int:

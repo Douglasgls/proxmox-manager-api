@@ -21,9 +21,9 @@ A arquitetura estabelece uma separação clara entre duas categorias exclusivas 
 | `tailscale` | Tailscale | Infraestrutura de rede mesh e VPN |
 
 ### Aplicação Docker (`docker_apps`)
-| Slug | Nome | Imagem Docker | Container Name | Porta Padrão |
+| Slug | Nome | Imagem Docker | Container Name | Porta Padrão Interna |
 | --- | --- | --- | --- | --- |
-| `filegator` | FileGator | `filegator/filegator` | `filegator-app` | `80` |
+| `filegator` | FileGator | `filegator/filegator` | `filegator-app` | `8080` |
 
 *Nota: O componente `python` e categorias legadas (`database`, `programming_language`) foram totalmente removidos nesta fase e serão reintroduzidos futuramente como componentes nativos.*
 
@@ -51,7 +51,7 @@ Ao solicitar uma aplicação Docker na criação de um container ou na instalaç
       "config": {
         "host": "0.0.0.0",
         "host_port": 8990,
-        "container_port": 80,
+        "container_port": 8080,
         "restart_policy": "unless-stopped"
       }
     }
@@ -62,8 +62,13 @@ Ao solicitar uma aplicação Docker na criação de um container ou na instalaç
 ### Parâmetros Suportados:
 - **`host`**: Endereço IP de escuta no LXC (`"0.0.0.0"` para rede externa ou `"127.0.0.1"` para escuta interna).
 - **`host_port`**: Porta publicada pelo Docker no container LXC (ex: `8990`).
-- **`container_port`**: Porta interna utilizada pela aplicação Docker (ex: `80`).
+- **`container_port`**: Porta interna utilizada pela aplicação Docker (ex: `8080`).
 - **`restart_policy`**: Política de reinicialização do container Docker (`"no"`, `"unless-stopped"`, `"always"`).
+
+### Hierarquia de Resolução da Porta Interna (`container_port`):
+1. **Override do Usuário**: Valor informado explicitamente em `config.container_port` (Configurações Avançadas).
+2. **Default do Template**: Porta interna padrão definida no template da aplicação Docker (ex: `8080` para `filegator`).
+3. **Falha Explicativa**: Caso nenhuma das anteriores esteja definida, a aplicação lança uma exceção `ValueError` sem aplicar fallbacks arbitrários.
 
 ---
 
