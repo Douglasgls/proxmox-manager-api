@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from time import perf_counter
 
 from app.dto.response.container import ContainerOperationDTO, ContainerStatusDTO
@@ -31,11 +32,13 @@ class ContainerService:
         proxmox_client: ProxmoxClient,
         audit_log_service: AuditLogService | None = None,
         provision_engine: ProvisionEngine | None = None,
+        container_component_service: Any | None = None,
     ):
         self.repository = repository
         self.proxmox_client = proxmox_client
         self.audit_log_service = audit_log_service
         self.provision_engine = provision_engine or ProvisionEngine()
+        self.container_component_service = container_component_service
 
         self.network_service = ContainerNetworkService()
         self.sync_service = ContainerSyncService(
@@ -50,6 +53,7 @@ class ContainerService:
             sync_service=self.sync_service,
             audit_log_service=self.audit_log_service,
             provision_engine=self.provision_engine,
+            container_component_service=self.container_component_service,
         )
 
     def create(
@@ -60,6 +64,7 @@ class ContainerService:
         memory_mb,
         disk_gb=2,
         image_name=None,
+        storage=None,
         bridge="vmbr0",
         ip_mode="dhcp",
         ip_address=None,
@@ -73,6 +78,7 @@ class ContainerService:
         lifecycle_callbacks: dict | None = None,
         provision_callbacks: dict | None = None,
         created_by: str | None = None,
+        resolved_components: list | None = None,
     ) -> Container:
         return self.lifecycle_service.create(
             name=name,
@@ -81,6 +87,7 @@ class ContainerService:
             memory_mb=memory_mb,
             disk_gb=disk_gb,
             image_name=image_name,
+            storage=storage,
             bridge=bridge,
             ip_mode=ip_mode,
             ip_address=ip_address,
@@ -94,6 +101,7 @@ class ContainerService:
             lifecycle_callbacks=lifecycle_callbacks,
             provision_callbacks=provision_callbacks,
             created_by=created_by,
+            resolved_components=resolved_components,
         )
 
     def start(self, container_id) -> ContainerOperationDTO:

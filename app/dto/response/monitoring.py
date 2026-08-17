@@ -48,6 +48,8 @@ class StorageInventoryDTO(BaseModel):
     shared: bool
     content_types: list[str] = Field(default_factory=list)
     total_bytes: int | None = None
+    used_bytes: int | None = None
+    avail_bytes: int | None = None
 
 
 class NetworkInterfaceDTO(BaseModel):

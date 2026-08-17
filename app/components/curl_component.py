@@ -1,59 +1,39 @@
-from app.components.base_components import BaseComponent
+from typing import Any
+from app.components.native_component import NativeComponent
+from app.provision.plan import ProvisionPlan
+from app.provision.step import ProvisionStep
 
-class CurlComponent(BaseComponent):
+
+class CurlComponent(NativeComponent):
 
     @property
-    def name(self):
+    def version_command(self) -> str:
+        return "curl --version"
+
+    @property
+    def package_name(self) -> str:
         return "curl"
 
-    def install(self, session):
-
-        result = session.exec(
-            "export DEBIAN_FRONTEND=noninteractive && "
-            "apt-get update && "
-            "apt-get install -y --no-install-recommends curl",
-            timeout=180,
+    def get_plan(self) -> ProvisionPlan:
+        step = ProvisionStep(
+            component_name=self.name,
+            install_commands=[
+                "apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update",
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl",
+            ],
+            validation_commands=[
+                "curl --version",
+            ],
+        )
+        return ProvisionPlan(
+            name="Curl Provision Plan",
+            description="Plano de instalação do Curl",
+            steps=[step],
         )
 
-        if result.exit_code != 0:
-            raise Exception(
-                f"Erro instalando curl:\n"
-                f"stdout:\n{result.stdout}\n\n"
-                f"stderr:\n{result.stderr}"
-            )
-
-        return "Curl instalado."
-
-
-    def validate(self, session):
-
-        result = session.exec(
-            "curl --version",
-            timeout=180,
-        )
-
-        if result.exit_code != 0:
-            raise Exception(
-                f"Curl validation failed:\n"
-                f"stdout:\n{result.stdout}\n\n"
-                f"stderr:\n{result.stderr}"
-            )
-
-        return "Curl validado."
-
-    def metadata(self):
+    def metadata(self) -> dict[str, Any]:
         return {
-            "name": self.name,
-            "description": "Instala o curl no sistema.",
+            "name": "curl",
+            "description": "Instala o cURL no sistema.",
             "version": "1.0.0",
         }
-
-    def rollback(self, session):
-
-        session.exec(
-            "export DEBIAN_FRONTEND=noninteractive && "
-            "apt-get remove -y curl"
-        )
-
-    def execute(self, session):
-        pass

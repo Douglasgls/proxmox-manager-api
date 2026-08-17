@@ -4,7 +4,8 @@ from fastapi import Depends
 from fastapi import status
 
 from app.dto.request.create_container import (
-    CreateContainerDTO
+    CreateContainerDTO,
+    InstallContainerComponentsDTO,
 )
 from app.dto.request.container_network import (
     UpdateContainerNetworkDTO
@@ -23,10 +24,17 @@ from app.core.dependencies import (
     get_job_service,
     get_tailscale_manager,
     get_access_token_manager,
+    get_component_service,
+    get_container_component_install_workflow,
+    get_container_component_service,
 )
 from app.dto.response.job import JobCreatedResponseDTO
 from app.services.container_creation_workflow import ContainerCreationWorkflow
+from app.services.container_component_install_workflow import ContainerComponentInstallWorkflow
 from app.services.container_service import ContainerService
+from app.services.component_service import ComponentService
+from app.services.container_component_service import ContainerComponentService
+from app.core.exceptions import DomainValidationError
 from app.security.dependencies import get_current_user
 from app.models.user import User
 
@@ -49,7 +57,13 @@ def create(
     workflow: ContainerCreationWorkflow = Depends(
         get_container_creation_workflow
     ),
+    component_service: ComponentService = Depends(
+        get_component_service
+    ),
 ):
+
+    if dto.components:
+        component_service.validate_and_resolve_slugs(dto.components)
 
     job = workflow.create_job()
 
@@ -276,3 +290,40 @@ def get_access_tokens(
     manager: AccessTokenManager = Depends(get_access_token_manager)
 ):
     return manager.list_tokens_metadata(id)
+
+
+@router.post(
+    "/containers/{id}/components",
+    response_model=JobCreatedResponseDTO,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def install_components(
+    id: str,
+    dto: InstallContainerComponentsDTO,
+    background_tasks: BackgroundTasks,
+    service: ContainerService = Depends(get_container_service),
+    component_service: ComponentService = Depends(get_component_service),
+    workflow: ContainerComponentInstallWorkflow = Depends(get_container_component_install_workflow),
+    container_component_service: ContainerComponentService = Depends(get_container_component_service),
+):
+    container = service.get(id)
+
+    if not dto.components:
+        raise DomainValidationError("A lista de componentes não pode estar vazia.")
+
+    existing_records = container_component_service.repository.list_by_container(container.id)
+    component_service.validate_and_resolve_slugs(
+        dto.components,
+        existing_container_components=existing_records,
+    )
+
+    job_dto = workflow.create_job(container_id=id)
+
+    background_tasks.add_task(
+        workflow.run,
+        job_dto.job_id,
+        id,
+        dto,
+    )
+
+    return job_dto

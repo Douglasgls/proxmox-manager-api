@@ -20,6 +20,8 @@ class StorageInventoryCollector:
             shared=self._as_bool(data.get("shared")),
             content_types=self._content_types(data.get("content")),
             total_bytes=self._int_or_none(data.get("total")),
+            used_bytes=self._int_or_none(data.get("used")),
+            avail_bytes=self._int_or_none(data.get("avail")),
         )
 
     @staticmethod

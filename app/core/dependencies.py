@@ -30,13 +30,12 @@ from app.integrations.proxmox import (
 from app.provision.engine import ProvisionEngine
 
 
-from app.services.user_service import (
-    UserService
-)
-
-from app.services.container_service import (
-    ContainerService
-)
+from app.repositories.component_repository import ComponentRepository
+from app.services.component_service import ComponentService
+from app.repositories.container_component_repository import ContainerComponentRepository
+from app.services.container_component_service import ContainerComponentService
+from app.services.user_service import UserService
+from app.services.container_service import ContainerService
 
 from app.services.container_creation_workflow import (
     ContainerCreationWorkflow
@@ -188,9 +187,32 @@ def get_user_service(db=Depends(get_db)):
     )
 
 
+def get_component_repository(db=Depends(get_db)) -> ComponentRepository:
+    return ComponentRepository(db)
+
+
+def get_component_service(db=Depends(get_db)) -> ComponentService:
+    return ComponentService(get_component_repository(db))
+
+
+def get_container_component_repository(db=Depends(get_db)) -> ContainerComponentRepository:
+    return ContainerComponentRepository(db)
+
+
+def get_container_component_service(
+    db=Depends(get_db),
+    provision_engine=Depends(get_provision_engine),
+) -> ContainerComponentService:
+    return ContainerComponentService(
+        repository=ContainerComponentRepository(db),
+        provision_engine=provision_engine,
+    )
+
+
 def get_container_service(
     db=Depends(get_db),
     provision_engine=Depends(get_provision_engine),
+    container_component_service=Depends(get_container_component_service),
 ):
 
     return ContainerService(
@@ -200,6 +222,7 @@ def get_container_service(
             AuditLogRepository(db)
         ),
         provision_engine=provision_engine,
+        container_component_service=container_component_service,
     )
 
 
@@ -273,8 +296,51 @@ def get_tailscale_manager(
 from app.access.repository import AccessTokenRepository
 from app.access.service import AccessTokenService
 from app.access.manager import AccessTokenManager
+from app.repositories.component_repository import ComponentRepository
+from app.services.component_service import ComponentService
 
 def get_access_token_manager(db=Depends(get_db)) -> AccessTokenManager:
     repository = AccessTokenRepository(db)
     service = AccessTokenService(repository)
     return AccessTokenManager(service)
+
+
+from app.repositories.container_component_repository import ContainerComponentRepository
+from app.services.container_component_service import ContainerComponentService
+
+
+
+
+def get_container_creation_workflow(
+    container_service=Depends(get_container_service),
+    job_service=Depends(get_job_service),
+    component_service=Depends(get_component_service),
+    container_component_service=Depends(get_container_component_service),
+):
+    return ContainerCreationWorkflow(
+        container_service=container_service,
+        job_service=job_service,
+        component_service=component_service,
+        container_component_service=container_component_service,
+    )
+
+
+from app.services.container_component_install_workflow import ContainerComponentInstallWorkflow
+
+
+def get_container_component_install_workflow(
+    db=Depends(get_db),
+    component_service=Depends(get_component_service),
+    container_component_service=Depends(get_container_component_service),
+    job_service=Depends(get_job_service),
+) -> ContainerComponentInstallWorkflow:
+    return ContainerComponentInstallWorkflow(
+        container_repository=ContainerRepository(db),
+        component_service=component_service,
+        container_component_service=container_component_service,
+        job_service=job_service,
+        proxmox_client=ProxmoxClient(),
+    )
+
+
+

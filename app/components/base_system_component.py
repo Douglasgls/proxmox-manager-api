@@ -88,6 +88,22 @@ class BaseSystemComponent(BaseComponent):
         )
         session.exec(rollback_cmd, timeout=180)
 
+    def get_installed_version(self, session):
+        try:
+            res = session.exec("cat /etc/os-release", timeout=30, raise_on_error=False)
+            if res and res.exit_code == 0 and res.stdout:
+                env = {}
+                for line in res.stdout.splitlines():
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        env[k.strip()] = v.strip().strip('"')
+                pretty_name = env.get("PRETTY_NAME") or env.get("VERSION") or env.get("VERSION_ID")
+                if pretty_name:
+                    return pretty_name
+        except Exception:
+            pass
+        return super().get_installed_version(session)
+
     def metadata(self):
         return {
             "name": self.name,

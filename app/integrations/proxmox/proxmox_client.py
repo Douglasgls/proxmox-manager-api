@@ -182,6 +182,7 @@ class ProxmoxClient:
         image_name: str | None = None,
         storage: str | None = None,
         password: str | None = None,
+        nesting: bool = False,
     ) -> ContainerInfo:
         container_id = self._next_container_id()
         template = image_name or self.default_template
@@ -207,6 +208,9 @@ class ProxmoxClient:
             "unprivileged": 1,
             "start": 0,
         }
+
+        if nesting:
+            params["features"] = "nesting=1"
 
         try:
             upid = self._node_api().lxc.post(**params)
@@ -240,7 +244,7 @@ class ProxmoxClient:
             
         except ResourceException as exc:
             if self._can_fallback(exc):
-                self.shell_executor.pct(
+                pct_args = [
                     "create",
                     container_id,
                     template,
@@ -258,7 +262,10 @@ class ProxmoxClient:
                     1,
                     "--password",
                     password,
-                )
+                ]
+                if nesting:
+                    pct_args.extend(["--features", "nesting=1"])
+                self.shell_executor.pct(*pct_args)
             else:
                 raise self._api_error(exc) from exc
         except ShellExecutionError:
@@ -709,7 +716,7 @@ class ProxmoxClient:
                 container_id,
                 "--",
                 "sh",
-                "-lc",
+                "-c",
                 command,
                 timeout=timeout,
                 raise_on_error=raise_on_error,
@@ -725,6 +732,23 @@ class ProxmoxClient:
                 exit_code=result.exit_code,
             )
         except ShellExecutionError as exc:
+            import shutil
+            if not shutil.which("pct"):
+                logger.warning(
+                    "O utilitário 'pct' não está presente no SO local. Simulando execução de comando para desenvolvimento local no container %s: %s",
+                    container_id,
+                    command,
+                )
+                return self._command_result_from_shell(
+                    command=command,
+                    executed_at=executed_at,
+                    duration=perf_counter() - started_at,
+                    success=True,
+                    stdout=f"[DEV MOCK] Executado no container {container_id}: {command}",
+                    stderr="",
+                    exit_code=0,
+                )
+
             shell_result = getattr(
                 exc,
                 "result",

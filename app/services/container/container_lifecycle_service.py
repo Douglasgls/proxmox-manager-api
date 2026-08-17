@@ -16,6 +16,10 @@ from app.services.container.container_sync_service import ContainerSyncService
 logger = logging.getLogger(__name__)
 
 
+from app.services.container_component_service import ContainerComponentService
+from app.models.component import Component
+
+
 class ContainerLifecycleService:
     """Serviço responsável por criação, inicialização, parada, reinício e destruição de containers LXC."""
 
@@ -27,6 +31,7 @@ class ContainerLifecycleService:
         sync_service: ContainerSyncService,
         audit_log_service: AuditLogService | None = None,
         provision_engine: ProvisionEngine | None = None,
+        container_component_service: ContainerComponentService | None = None,
     ):
         self.repository = repository
         self.proxmox_client = proxmox_client
@@ -34,6 +39,7 @@ class ContainerLifecycleService:
         self.sync_service = sync_service
         self.audit_log_service = audit_log_service
         self.provision_engine = provision_engine or ProvisionEngine()
+        self.container_component_service = container_component_service
 
     def create(
         self,
@@ -43,6 +49,7 @@ class ContainerLifecycleService:
         memory_mb: int,
         disk_gb: int = 2,
         image_name: str | None = None,
+        storage: str | None = None,
         bridge: str = "vmbr0",
         ip_mode: str = "dhcp",
         ip_address: str | None = None,
@@ -56,6 +63,7 @@ class ContainerLifecycleService:
         lifecycle_callbacks: dict | None = None,
         provision_callbacks: dict | None = None,
         created_by: str | None = None,
+        resolved_components: list[Component] | None = None,
     ) -> Container:
         started_at = perf_counter()
         lifecycle = lifecycle_callbacks or {}
@@ -76,9 +84,6 @@ class ContainerLifecycleService:
         if existing:
             raise ValueError("Container já existe")
 
-        logger.info("Creating container...")
-        self._notify_lifecycle(lifecycle, "waiting_proxmox_task")
-
         proxmox_container = self.proxmox_client.create_container(
             name=name,
             cpu=cpu,
@@ -87,6 +92,8 @@ class ContainerLifecycleService:
             disk_gb=disk_gb,
             image_name=image_name,
             password=password,
+            storage=storage,
+            nesting=True,
         )
         logger.info("Container created.")
         self._notify_lifecycle(lifecycle, "container_created", proxmox_container)
@@ -148,28 +155,46 @@ class ContainerLifecycleService:
             container_id=proxmox_container.container_id,
         )
 
-        plan = provision_plan or ProvisionPlan(
-            id="default",
-            name="Default Provision",
-            description="Provisionamento padrão",
-            components=[],
-        )
         callbacks = provision_callbacks or {}
 
-        logger.info("Provisioning components...")
-        self._notify_lifecycle(lifecycle, "provisioning_started", plan)
-        result = self.provision_engine.execute(
-            plan=plan,
-            session=session,
-            on_component_install_start=callbacks.get("install_start"),
-            on_component_install_finish=callbacks.get("install_finish"),
-            on_component_validate_start=callbacks.get("validate_start"),
-            on_component_validate_finish=callbacks.get("validate_finish"),
-        )
+        if resolved_components and self.container_component_service:
+            logger.info("Provisioning catalog components via ContainerComponentService...")
+            self.container_component_service.create_pending_records(
+                container_id=created_container.id,
+                components=resolved_components,
+            )
+            self._notify_lifecycle(lifecycle, "provisioning_started", None)
+            comp_results = self.container_component_service.provision_container_components(
+                container=created_container,
+                components=resolved_components,
+                session=session,
+                callbacks=callbacks,
+            )
+            failed = [r for r in comp_results if r.status == "FAILED"]
+            if failed:
+                logger.error("Erro no provisionamento de componentes: %s", failed[0].error)
+                raise RuntimeError(failed[0].error or "Erro durante provisionamento dos componentes")
+        else:
+            plan = provision_plan or ProvisionPlan(
+                id="default",
+                name="Default Provision",
+                description="Provisionamento padrão",
+                components=[],
+            )
+            logger.info("Provisioning components...")
+            self._notify_lifecycle(lifecycle, "provisioning_started", plan)
+            result = self.provision_engine.execute(
+                plan=plan,
+                session=session,
+                on_component_install_start=callbacks.get("install_start"),
+                on_component_install_finish=callbacks.get("install_finish"),
+                on_component_validate_start=callbacks.get("validate_start"),
+                on_component_validate_finish=callbacks.get("validate_finish"),
+            )
 
-        if not result.success:
-            logger.error("Erro no provisionamento: %s", result.error)
-            raise RuntimeError(result.error)
+            if not result.success:
+                logger.error("Erro no provisionamento: %s", result.error)
+                raise RuntimeError(result.error)
 
         logger.info("Provisioning completed.")
         logger.info("Container created successfully.")

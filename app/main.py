@@ -19,6 +19,7 @@ from app.api.health import router as health
 from app.api.monitoring import router as monitoring
 from app.api.websocket import router as websocket
 from app.api.access_tokens import router as access_tokens
+from app.api.components import router as components
 from app.api.cloud import router as cloud_router
 from app.console.websocket_console import router as console_router
 from app.console.console_manager import console_manager
@@ -40,6 +41,17 @@ async def lifespan(app: FastAPI):
     job_event_manager.loop = asyncio.get_running_loop()
     print(f"[Lifespan DEBUG] Registrou o event loop principal no job_event_manager: {job_event_manager.loop}")
     
+    # 0. Sincronização idempotente do catálogo de componentes padrão
+    try:
+        from app.repositories.component_repository import ComponentRepository
+        from app.services.component_service import ComponentService
+        with SessionLocal() as db:
+            comp_service = ComponentService(ComponentRepository(db))
+            comp_service.sync_default_catalog()
+            logger.info("Catálogo de componentes padrão sincronizado com sucesso.")
+    except Exception as seed_exc:
+        logger.error("Erro ao sincronizar catálogo de componentes padrão: %s", seed_exc, exc_info=True)
+
     # 1. Reconciliação atômica de inicialização com Proxmox VE antes de notificar o Cloud
     reconciliation_success = False
     max_retries = 3
@@ -172,6 +184,11 @@ app.include_router(
 
 app.include_router(
     console_router
+)
+
+app.include_router(
+    tags=["components"],
+    router=components
 )
 
 app.include_router(

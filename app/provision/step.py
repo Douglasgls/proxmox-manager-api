@@ -11,12 +11,16 @@ class ProvisionStep:
         started_at=None,
         finished_at=None,
         message: str | None = None,
+        install_commands: list[str] | None = None,
+        validation_commands: list[str] | None = None,
     ):
         self.component_name = component_name
         self.status = status
         self.started_at = started_at
         self.finished_at = finished_at
         self.message = message
+        self.install_commands = install_commands or []
+        self.validation_commands = validation_commands or []
 
     def start(
         self,

@@ -1,5 +1,32 @@
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict, Field, AliasChoices, field_validator
+
+
+class ContainerComponentResponseDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    slug: str
+    name: str
+    category: str
+    status: str
+    installed_version: str | None = None
+    config: dict | None = None
+    error: str | None = None
+    installed_at: datetime | None = None
+
+
+def _sanitize_config(cfg: dict | None) -> dict | None:
+    if not cfg or not isinstance(cfg, dict):
+        return cfg
+    sanitized = {}
+    for k, v in cfg.items():
+        if isinstance(v, dict):
+            sanitized[k] = _sanitize_config(v)
+        elif k.lower() in ("password", "secret", "token") or "password" in k.lower() or "secret" in k.lower():
+            sanitized[k] = "********" if v else v
+        else:
+            sanitized[k] = v
+    return sanitized
 
 
 class ContainerResponseDTO(BaseModel):
@@ -25,7 +52,43 @@ class ContainerResponseDTO(BaseModel):
     vlan: int | None = None
     mac_address: str | None = None
     image_name: str | None = None
-    components: list[str] = []
+    components: list[ContainerComponentResponseDTO] = Field(
+        default=[],
+        validation_alias=AliasChoices("components", "container_components"),
+    )
+
+    @field_validator("components", mode="before")
+    @classmethod
+    def transform_components(cls, v):
+        if not v:
+            return []
+        result = []
+        for item in v:
+            if hasattr(item, "component") and item.component:
+                result.append({
+                    "slug": item.component.slug,
+                    "name": item.component.name,
+                    "category": item.component.category,
+                    "status": item.status,
+                    "installed_version": item.installed_version,
+                    "config": _sanitize_config(item.config),
+                    "error": item.error,
+                    "installed_at": item.installed_at,
+                })
+            elif isinstance(item, dict):
+                d = dict(item)
+                if "config" in d:
+                    d["config"] = _sanitize_config(d["config"])
+                result.append(d)
+            elif isinstance(item, str):
+                result.append({
+                    "slug": item,
+                    "name": item.capitalize(),
+                    "category": "unknown",
+                    "status": "INSTALLED",
+                })
+        return result
+
 
 
 class ContainerStatusDTO(BaseModel):

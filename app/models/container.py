@@ -148,3 +148,11 @@ class Container(Base):
         passive_deletes=True,
     )
 
+    container_components = relationship(
+        "ContainerComponent",
+        back_populates="container",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
