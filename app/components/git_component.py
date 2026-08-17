@@ -6,6 +6,14 @@ from app.provision.step import ProvisionStep
 
 class GitComponent(NativeComponent):
 
+    @property
+    def version_command(self) -> str:
+        return "git --version"
+
+    @property
+    def package_name(self) -> str:
+        return "git"
+
     def get_plan(self) -> ProvisionPlan:
         step = ProvisionStep(
             component_name=self.name,

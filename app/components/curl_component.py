@@ -6,6 +6,14 @@ from app.provision.step import ProvisionStep
 
 class CurlComponent(NativeComponent):
 
+    @property
+    def version_command(self) -> str:
+        return "curl --version"
+
+    @property
+    def package_name(self) -> str:
+        return "curl"
+
     def get_plan(self) -> ProvisionPlan:
         step = ProvisionStep(
             component_name=self.name,

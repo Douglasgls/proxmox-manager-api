@@ -102,7 +102,7 @@ class TestPhase2ContainerComponents(unittest.TestCase):
 
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0].status, ContainerComponentStatus.INSTALLED.value)
-        self.assertEqual(records[0].installed_version, "1.0.0")
+        self.assertEqual(records[0].installed_version, "2.39.0")
         self.assertIsNotNone(records[0].installed_at)
 
     def test_provision_docker_app_with_custom_config(self):

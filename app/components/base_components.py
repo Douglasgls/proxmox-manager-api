@@ -26,3 +26,11 @@ class BaseComponent(ABC):
     def name(self) -> str:
         return self.metadata()["name"]
 
+    def get_installed_version(self, session: Any) -> str | None:
+        """Tenta consultar a versão real instalada no container através da sessão.
+
+        Retorna None se a inspeção dinâmica não for suportada ou falhar.
+        """
+        return None
+
+

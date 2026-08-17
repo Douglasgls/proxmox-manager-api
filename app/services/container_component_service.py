@@ -95,7 +95,20 @@ class ContainerComponentService:
                 )
 
                 if provision_result.success:
-                    installed_version = impl.metadata().get("version")
+                    installed_version = None
+                    if hasattr(impl, "get_installed_version"):
+                        try:
+                            installed_version = impl.get_installed_version(session)
+                        except Exception as exc:
+                            logger.warning(
+                                "Falha ao obter versão real do componente %s no container %s: %s",
+                                comp.slug,
+                                container.container_number,
+                                exc,
+                            )
+                    if not installed_version:
+                        installed_version = impl.metadata().get("version")
+
                     effective_config = getattr(impl, "get_effective_config", lambda: request_cfg)()
                     logger.info(
                         "Componente %s instalado com sucesso no container %s (versão: %s)",

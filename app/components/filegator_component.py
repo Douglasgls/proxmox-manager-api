@@ -18,7 +18,7 @@ class FileGatorComponent(DockerApplicationComponent):
 
     @property
     def image(self) -> str:
-        return "filegator/filegator"
+        return "filegator/filegator:latest"
 
     @property
     def container_name(self) -> str:

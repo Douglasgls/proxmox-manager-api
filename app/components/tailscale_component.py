@@ -7,6 +7,14 @@ from app.provision.step import ProvisionStep
 class TailscaleComponent(NativeComponent):
     """Componente responsavel por instalar o Tailscale (categoria native)."""
 
+    @property
+    def version_command(self) -> str:
+        return "tailscale version"
+
+    @property
+    def package_name(self) -> str:
+        return "tailscale"
+
     def get_plan(self) -> ProvisionPlan:
         step = ProvisionStep(
             component_name=self.name,

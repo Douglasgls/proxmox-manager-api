@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 from app.components.base_components import BaseComponent
@@ -170,6 +171,76 @@ class DockerApplicationComponent(BaseComponent, ABC):
             "env": self.env_vars,
             "volumes": self.volumes,
         }
+
+    @property
+    def version_command(self) -> str | None:
+        """Comando opcional a ser executado via docker exec (ex: 'docker exec redis-app redis-server -v')."""
+        return None
+
+    def get_installed_version(self, session: Any) -> str | None:
+        """Consulta a versão real da aplicação Docker rodando no container LXC."""
+        # 1. Tenta comando de versão específico da aplicação se configurado
+        if self.version_command:
+            try:
+                res = session.exec(self.version_command, timeout=30, raise_on_error=False)
+                if res and res.exit_code == 0 and res.stdout:
+                    ver = self._extract_version_string(res.stdout)
+                    if ver:
+                        return ver
+            except Exception:
+                pass
+
+        # 2. Tenta obter o rótulo de versão org.opencontainers.image.version via docker inspect
+        try:
+            cmd = f"docker inspect --format '{{{{index .Config.Labels \"org.opencontainers.image.version\"}}}}' {self.container_name}"
+            res = session.exec(cmd, timeout=30, raise_on_error=False)
+            if res and res.exit_code == 0 and res.stdout.strip():
+                lbl = res.stdout.strip()
+                if lbl and lbl != "<no value>":
+                    return lbl
+        except Exception:
+            pass
+
+        # 3. Tenta inspecionar variáveis de ambiente do container Docker procurando por *_VERSION
+        try:
+            cmd = f"docker inspect --format '{{{{range .Config.Env}}}}{{{{println .}}}}{{{{end}}}}' {self.container_name}"
+            res = session.exec(cmd, timeout=30, raise_on_error=False)
+            if res and res.exit_code == 0 and res.stdout:
+                for line in res.stdout.splitlines():
+                    if "_VERSION=" in line or line.startswith("VERSION="):
+                        val = line.split("=", 1)[1].strip()
+                        ver = self._extract_version_string(val)
+                        if ver:
+                            return ver
+        except Exception:
+            pass
+
+        # 4. Fallback: obtém a tag da imagem a partir do container (ex: 'redis:7-alpine' -> '7-alpine')
+        try:
+            cmd = f"docker inspect --format '{{{{.Config.Image}}}}' {self.container_name}"
+            res = session.exec(cmd, timeout=30, raise_on_error=False)
+            if res and res.exit_code == 0 and res.stdout.strip():
+                img_name = res.stdout.strip()
+                if ":" in img_name:
+                    tag = img_name.split(":", 1)[1]
+                    if tag:
+                        return tag
+                return img_name
+        except Exception:
+            pass
+
+        return None
+
+    @staticmethod
+    def _extract_version_string(output: str) -> str | None:
+        """Extrai o padrão numérico de versão a partir da saída de um comando."""
+        text = output.strip()
+        if not text:
+            return None
+        match = re.search(r"(\d+\.\d+(?:\.\d+)?(?:[~+.\-\w]+)?)", text)
+        if match:
+            return match.group(1)
+        return text.splitlines()[0] if text else None
 
     def metadata(self) -> dict[str, Any]:
         return {
