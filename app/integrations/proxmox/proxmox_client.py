@@ -711,22 +711,41 @@ class ProxmoxClient:
         )
 
         try:
-            result = self.shell_executor.pct(
-                "exec",
-                container_id,
-                "--",
-                "sh",
-                "-c",
-                command,
-                timeout=timeout,
-                raise_on_error=raise_on_error,
-            )
+            max_attach_retries = 5
+            for attempt in range(max_attach_retries):
+                result = self.shell_executor.pct(
+                    "exec",
+                    container_id,
+                    "--",
+                    "sh",
+                    "-c",
+                    command,
+                    timeout=timeout,
+                    raise_on_error=False,
+                )
+                if result.stderr and ("Failed to get init pid" in result.stderr or "Failed to get attach context" in result.stderr):
+                    if attempt < max_attach_retries - 1:
+                        logger.warning(
+                            "lxc-attach init pid não pronto no container %s (tentativa %d/%d), aguardando...",
+                            container_id,
+                            attempt + 1,
+                            max_attach_retries,
+                        )
+                        time.sleep(2)
+                        continue
+
+                if raise_on_error and result.exit_code != 0:
+                    raise ShellExecutionError(
+                        result.stderr or result.stdout or f"Command failed: pct exec {container_id} -- sh -c {command}",
+                        result=result,
+                    )
+                break
 
             return self._command_result_from_shell(
                 command=command,
                 executed_at=executed_at,
                 duration=perf_counter() - started_at,
-                success=True,
+                success=(result.exit_code == 0),
                 stdout=result.stdout,
                 stderr=result.stderr,
                 exit_code=result.exit_code,
