@@ -899,6 +899,9 @@ class ProxmoxClient:
                     if current.status == "running":
                         break
                     time.sleep(1)
+
+                # Aguarda 3 segundos adicionais para a pilha de rede e DNS do container inicializarem
+                time.sleep(3)
         
         messages.append("Container ready")
         
