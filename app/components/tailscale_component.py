@@ -8,6 +8,10 @@ class TailscaleComponent(NativeComponent):
     """Componente responsavel por instalar o Tailscale (categoria native)."""
 
     @property
+    def name(self) -> str:
+        return "Tailscale"
+
+    @property
     def version_command(self) -> str:
         return "tailscale version"
 
@@ -23,9 +27,9 @@ class TailscaleComponent(NativeComponent):
                 "apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update && "
                 "apt-get install -y --no-install-recommends ca-certificates curl gnupg && "
                 "install -d -m 0755 /usr/share/keyrings && "
-                "curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg "
+                "curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg "
                 "-o /usr/share/keyrings/tailscale-archive-keyring.gpg && "
-                "curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.tailscale-keyring.list "
+                "curl --retry 5 --retry-delay 2 --retry-connrefused -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.tailscale-keyring.list "
                 "-o /etc/apt/sources.list.d/tailscale.list && "
                 "apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update && "
                 "apt-get install -y --no-install-recommends tailscale"
@@ -42,7 +46,7 @@ class TailscaleComponent(NativeComponent):
 
     def metadata(self) -> dict[str, Any]:
         return {
-            "name": self.name,
+            "name": "Tailscale",
             "description": "Instala o Tailscale no sistema.",
             "version": "1.0.0",
         }

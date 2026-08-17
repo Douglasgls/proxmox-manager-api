@@ -7,6 +7,10 @@ from app.provision.step import ProvisionStep
 class CurlComponent(NativeComponent):
 
     @property
+    def name(self) -> str:
+        return "cURL"
+
+    @property
     def version_command(self) -> str:
         return "curl --version"
 

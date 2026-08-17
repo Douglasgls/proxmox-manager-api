@@ -37,4 +37,34 @@ class BaseComponent(ABC):
         """Valida a configuração informada para este componente."""
         pass
 
+    def install(self, session: Any) -> str:
+        """Executa os comandos de instalação do plano declarativo para compatibilidade direta."""
+        plan = self.get_plan()
+        count = 0
+        for step in getattr(plan, "steps", []):
+            for cmd in getattr(step, "install_commands", []):
+                res = session.exec(cmd, timeout=300)
+                if res and res.exit_code != 0:
+                    raise Exception(
+                        f"Erro executando comando de instalação '{cmd}':\n"
+                        f"stdout:\n{res.stdout}\n\nstderr:\n{res.stderr}"
+                    )
+                count += 1
+        return f"{count} comandos de instalação executados com sucesso."
+
+    def validate(self, session: Any) -> str:
+        """Executa os comandos de validação do plano declarativo para compatibilidade direta."""
+        plan = self.get_plan()
+        count = 0
+        for step in getattr(plan, "steps", []):
+            for cmd in getattr(step, "validation_commands", []):
+                res = session.exec(cmd, timeout=60)
+                if res and res.exit_code != 0:
+                    raise Exception(
+                        f"Validação falhou para o comando '{cmd}':\n"
+                        f"stdout:\n{res.stdout}\n\nstderr:\n{res.stderr}"
+                    )
+                count += 1
+        return f"{count} comandos de validação executados com sucesso."
+
 

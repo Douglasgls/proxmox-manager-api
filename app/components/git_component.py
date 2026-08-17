@@ -7,6 +7,10 @@ from app.provision.step import ProvisionStep
 class GitComponent(NativeComponent):
 
     @property
+    def name(self) -> str:
+        return "Git"
+
+    @property
     def version_command(self) -> str:
         return "git --version"
 
