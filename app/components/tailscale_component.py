@@ -8,6 +8,10 @@ class TailscaleComponent(NativeComponent):
     """Componente responsavel por instalar o Tailscale (categoria native)."""
 
     @property
+    def name(self) -> str:
+        return "Tailscale"
+
+    @property
     def version_command(self) -> str:
         return "tailscale version"
 
@@ -42,7 +46,7 @@ class TailscaleComponent(NativeComponent):
 
     def metadata(self) -> dict[str, Any]:
         return {
-            "name": self.name,
+            "name": "Tailscale",
             "description": "Instala o Tailscale no sistema.",
             "version": "1.0.0",
         }
