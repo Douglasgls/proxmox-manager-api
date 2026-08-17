@@ -21,7 +21,7 @@ class JellyfinComponent(DockerApplicationComponent):
         return "jellyfin/jellyfin:latest"
 
     @property
-    def container_name(self) -> str:
+    def default_container_name(self) -> str:
         return "jellyfin-app"
 
     @property

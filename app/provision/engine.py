@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from collections.abc import Callable
 
@@ -18,6 +19,17 @@ logger = logging.getLogger(__name__)
 class ProvisionEngine:
     def __init__(self):
         ...
+
+    @staticmethod
+    def _sanitize_cmd(cmd: str) -> str:
+        if not cmd:
+            return ""
+        return re.sub(
+            r'((?:PASSWORD|SECRET|KEY)=["\']?)([^"\'\s]+)(["\']?)',
+            r'\1********\3',
+            cmd,
+            flags=re.IGNORECASE,
+        )
 
     def execute(
         self,
@@ -119,11 +131,11 @@ class ProvisionEngine:
             on_component_install_start(step)
 
         for cmd in step.install_commands:
-            logger.info("Executando instalação no container: %s", cmd)
+            logger.info("Executando instalação no container: %s", self._sanitize_cmd(cmd))
             res = session.exec(cmd, timeout=300)
             if res.exit_code != 0:
                 raise Exception(
-                    f"Erro executando comando de instalação '{cmd}':\n"
+                    f"Erro executando comando de instalação '{self._sanitize_cmd(cmd)}':\n"
                     f"stdout:\n{res.stdout}\n\nstderr:\n{res.stderr}"
                 )
 
@@ -134,11 +146,11 @@ class ProvisionEngine:
             on_component_validate_start(step)
 
         for cmd in step.validation_commands:
-            logger.info("Executando validação no container: %s", cmd)
+            logger.info("Executando validação no container: %s", self._sanitize_cmd(cmd))
             res = session.exec(cmd, timeout=60)
             if res.exit_code != 0:
                 raise Exception(
-                    f"Validação falhou para o comando '{cmd}':\n"
+                    f"Validação falhou para o comando '{self._sanitize_cmd(cmd)}':\n"
                     f"stdout:\n{res.stdout}\n\nstderr:\n{res.stderr}"
                 )
 

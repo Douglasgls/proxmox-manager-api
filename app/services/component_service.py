@@ -142,15 +142,18 @@ class ComponentService:
         """Resolve o slug persistido para a classe implementadora correspondente."""
         return ComponentRegistry.get(slug, config=config)
 
-    def validate_and_resolve_slugs(self, items: list[str | dict[str, Any] | Any] | None) -> list[Component]:
-        """Valida, verifica conflitos de portas e resolve os componentes solicitados."""
+    def validate_and_resolve_slugs(
+        self,
+        items: list[str | dict[str, Any] | Any] | None,
+        existing_container_components: list[Any] | None = None,
+    ) -> list[Component]:
+        """Valida, verifica conflitos de portas/nomes e resolve os componentes solicitados."""
         if not items:
             return []
 
         from app.core.exceptions import DomainValidationError
 
         parsed_items: list[tuple[str, dict[str, Any]]] = []
-        seen_slugs: set[str] = set()
 
         for item in items:
             if isinstance(item, str):
@@ -182,41 +185,130 @@ class ComponentService:
 
         resolved_components = []
         invalid_slugs = []
+
+        existing_native_slugs: set[str] = set()
+        used_container_names: set[str] = set()
         used_ports: set[tuple[str, int]] = set()
 
+        if existing_container_components:
+            for record in existing_container_components:
+                rec_status = str(getattr(record, "status", ""))
+                if rec_status.upper() == "FAILED":
+                    continue
+
+                comp_obj = getattr(record, "component", None)
+                if not comp_obj and getattr(record, "component_id", None):
+                    comp_obj = self.repository.get(record.component_id)
+
+                cat = getattr(comp_obj, "category", None) if comp_obj else None
+                slug_val = getattr(comp_obj, "slug", "") if comp_obj else ""
+
+                if cat == ComponentCategory.NATIVE.value and slug_val:
+                    existing_native_slugs.add(slug_val.lower())
+
+                rec_cfg = getattr(record, "config", None) or {}
+                if isinstance(rec_cfg, dict) and slug_val:
+                    try:
+                        impl_existing = ComponentRegistry.get(slug_val, config=rec_cfg)
+                        eff_existing = impl_existing.get_effective_config()
+                        c_name_ex = eff_existing.get("container_name")
+                        if c_name_ex:
+                            used_container_names.add(str(c_name_ex).strip())
+                        h_port_ex = eff_existing.get("host_port")
+                        if h_port_ex is not None:
+                            h_host_ex = str(eff_existing.get("host", "0.0.0.0"))
+                            used_ports.add((h_host_ex, int(h_port_ex)))
+                    except Exception:
+                        c_name = rec_cfg.get("container_name")
+                        if c_name:
+                            used_container_names.add(str(c_name).strip())
+                        h_port = rec_cfg.get("host_port")
+                        if h_port is not None:
+                            try:
+                                h_port_int = int(h_port)
+                                h_host = str(rec_cfg.get("host", "0.0.0.0"))
+                                used_ports.add((h_host, h_port_int))
+                            except (ValueError, TypeError):
+                                pass
+
+        seen_native_batch: set[str] = set()
+
         for slug, cfg in parsed_items:
-            comp = self.repository.get_by_slug(slug)
-            if not comp or not comp.is_active:
+            comp_db = self.repository.get_by_slug(slug)
+            if not comp_db or not comp_db.is_active:
                 invalid_slugs.append(slug)
                 continue
 
             try:
                 impl = ComponentRegistry.get(slug, config=cfg)
-            except Exception:
-                invalid_slugs.append(slug)
-                continue
+                impl.validate_config()
+            except Exception as exc:
+                if isinstance(exc, DomainValidationError):
+                    raise
+                raise DomainValidationError(
+                    f"Configuração inválida para o componente '{comp_db.name}' ({slug}): {exc}"
+                )
 
-            # Validação de conflito de portas entre componentes docker_apps no mesmo container
-            if getattr(impl, "category", None) == ComponentCategory.DOCKER_APPS.value:
+            category = getattr(impl, "category", comp_db.category)
+
+            # 1. Validação de componentes NATIVOS
+            if category == ComponentCategory.NATIVE.value:
+                if slug in existing_native_slugs:
+                    raise DomainValidationError(
+                        f"O componente nativo '{comp_db.name}' ({slug}) já está instalado neste container."
+                    )
+                if slug in seen_native_batch:
+                    continue
+                seen_native_batch.add(slug)
+
+            # 2. Validação de DOCKER APPS
+            elif category == ComponentCategory.DOCKER_APPS.value:
                 effective_cfg = getattr(impl, "get_effective_config", lambda: {})()
-                host = effective_cfg.get("host", "0.0.0.0")
-                host_port = effective_cfg.get("host_port") or getattr(impl, "host_port", None)
-                if host_port is not None:
-                    port_key = (host, host_port)
+                c_name = effective_cfg.get("container_name")
+                h_host = effective_cfg.get("host", "0.0.0.0")
+                h_port = effective_cfg.get("host_port")
 
-                    if port_key in used_ports:
+                # Conflito de nome do container Docker
+                if c_name:
+                    c_name_str = str(c_name).strip()
+                    if c_name_str in used_container_names:
                         raise DomainValidationError(
-                            f"Conflito de porta detectado: a porta host {host_port} no bind address {host} já está atribuída a outro componente."
+                            f"Conflito de nome: o container Docker com o nome '{c_name_str}' já está em uso neste container LXC."
                         )
-                    used_ports.add(port_key)
+                    used_container_names.add(c_name_str)
 
-            if slug in seen_slugs:
-                continue
-            seen_slugs.add(slug)
+                # Conflito de porta publicada no host
+                if h_port is not None:
+                    try:
+                        port_int = int(h_port)
+                        if not (1 <= port_int <= 65535):
+                            raise DomainValidationError(
+                                f"A porta publicada no host ({port_int}) deve estar entre 1 e 65535."
+                            )
+                        port_key = (h_host, port_int)
+                        if port_key in used_ports:
+                            raise DomainValidationError(
+                                f"Conflito de porta: a porta host {port_int} no bind address {h_host} já está atribuída a outro componente no mesmo container LXC."
+                            )
+                        used_ports.add(port_key)
+                    except DomainValidationError:
+                        raise
+                    except (ValueError, TypeError):
+                        raise DomainValidationError(f"Porta host inválida: {h_port}")
 
-            # Anexa a configuração da requisição ao objeto Component temporário
-            comp._request_config = cfg
-            resolved_components.append(comp)
+            # Instancia o objeto Component com a configuração da requisição anexada
+            comp_instance = Component(
+                id=comp_db.id,
+                name=comp_db.name,
+                slug=comp_db.slug,
+                category=comp_db.category,
+                version=comp_db.version,
+                description=comp_db.description,
+                is_default=comp_db.is_default,
+                is_active=comp_db.is_active,
+            )
+            comp_instance._request_config = cfg
+            resolved_components.append(comp_instance)
 
         if invalid_slugs:
             raise DomainValidationError(

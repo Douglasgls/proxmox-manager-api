@@ -21,7 +21,7 @@ class RedisComponent(DockerApplicationComponent):
         return "redis:7-alpine"
 
     @property
-    def container_name(self) -> str:
+    def default_container_name(self) -> str:
         return "redis-app"
 
     @property

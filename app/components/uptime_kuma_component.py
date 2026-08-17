@@ -21,7 +21,7 @@ class UptimeKumaComponent(DockerApplicationComponent):
         return "louislam/uptime-kuma:1"
 
     @property
-    def container_name(self) -> str:
+    def default_container_name(self) -> str:
         return "uptime-kuma-app"
 
     @property

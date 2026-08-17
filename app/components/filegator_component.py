@@ -21,7 +21,7 @@ class FileGatorComponent(DockerApplicationComponent):
         return "filegator/filegator:latest"
 
     @property
-    def container_name(self) -> str:
+    def default_container_name(self) -> str:
         return "filegator-app"
 
     @property
@@ -53,6 +53,25 @@ class FileGatorComponent(DockerApplicationComponent):
         return "https://filegator.io/docs"
 
     @property
+    def username(self) -> str | None:
+        val = self.config.get("username")
+        return str(val) if val is not None else None
+
+    @property
+    def password(self) -> str | None:
+        val = self.config.get("password")
+        return str(val) if val is not None else None
+
+    @property
+    def default_env_vars(self) -> dict[str, str]:
+        envs = {}
+        if self.username:
+            envs["FILEGATOR_USERNAME"] = self.username
+        if self.password:
+            envs["FILEGATOR_PASSWORD"] = self.password
+        return envs
+
+    @property
     def default_volumes(self) -> list[str]:
         return ["filegator-storage:/var/www/filegator/repository"]
 
@@ -65,3 +84,11 @@ class FileGatorComponent(DockerApplicationComponent):
                 "description": "Repositório persistente de arquivos do FileGator",
             }
         ]
+
+    def get_effective_config(self) -> dict[str, Any]:
+        cfg = super().get_effective_config()
+        if self.username:
+            cfg["username"] = self.username
+        if self.password:
+            cfg["password"] = self.password
+        return cfg

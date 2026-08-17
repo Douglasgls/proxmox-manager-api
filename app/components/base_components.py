@@ -33,4 +33,8 @@ class BaseComponent(ABC):
         """
         return None
 
+    def validate_config(self) -> None:
+        """Valida a configuração informada para este componente."""
+        pass
+
 

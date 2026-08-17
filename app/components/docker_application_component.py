@@ -23,9 +23,17 @@ class DockerApplicationComponent(BaseComponent, ABC):
         """Imagem Docker a ser executada."""
 
     @property
-    @abstractmethod
+    def default_container_name(self) -> str:
+        """Nome padrão do container Docker para esta aplicação."""
+        return f"{self.slug}-app"
+
+    @property
     def container_name(self) -> str:
-        """Nome do container Docker."""
+        """Nome do container Docker (customizado via config ou o padrão da aplicação)."""
+        user_val = self.config.get("container_name")
+        if user_val and str(user_val).strip():
+            return str(user_val).strip()
+        return self.default_container_name
 
     @property
     @abstractmethod
@@ -54,6 +62,9 @@ class DockerApplicationComponent(BaseComponent, ABC):
                     return port
             except (ValueError, TypeError):
                 pass
+            raise ValueError(
+                f"A porta interna do container (container_port={user_val}) é inválida. Deve ser um número inteiro entre 1 e 65535."
+            )
 
         try:
             default_port = self.default_container_port
@@ -65,13 +76,21 @@ class DockerApplicationComponent(BaseComponent, ABC):
             pass
 
         raise ValueError(
-            f"Porta interna do container (container_port) não definida para a aplicação Docker '{getattr(self, 'name', 'desconhecida')}'."
+            f"Porta interna do container (container_port) não definida para a aplicação '{getattr(self, 'name', 'desconhecida')}'."
         )
 
     @property
     def host_port(self) -> int:
         val = self.config.get("host_port", self.default_host_port)
-        return int(val)
+        try:
+            port = int(val)
+            if 1 <= port <= 65535:
+                return port
+        except (ValueError, TypeError):
+            pass
+        raise ValueError(
+            f"A porta publicada no host (host_port={val}) é inválida. Deve ser um número inteiro entre 1 e 65535."
+        )
 
     @property
     def host(self) -> str:
@@ -79,7 +98,10 @@ class DockerApplicationComponent(BaseComponent, ABC):
 
     @property
     def restart_policy(self) -> str:
-        return str(self.config.get("restart_policy", self.default_restart_policy))
+        val = str(self.config.get("restart_policy", self.default_restart_policy))
+        if val not in ("always", "unless-stopped", "on-failure", "no"):
+            raise ValueError(f"Política de restart inválida: '{val}'. Valores permitidos: always, unless-stopped, on-failure, no.")
+        return val
 
     @property
     def is_web_app(self) -> bool:
@@ -150,7 +172,11 @@ class DockerApplicationComponent(BaseComponent, ABC):
         return list(self.default_volumes)
 
     def validate_config(self) -> None:
-        """Valida se todas as variáveis obrigatórias do esquema foram fornecidas."""
+        """Valida se todas as portas e variáveis de ambiente obrigatórias foram fornecidas corretamente."""
+        _ = self.host_port
+        _ = self.container_port
+        _ = self.restart_policy
+
         effective_envs = self.env_vars
         for schema in self.env_vars_schema:
             if schema.get("required"):
@@ -164,6 +190,7 @@ class DockerApplicationComponent(BaseComponent, ABC):
     def get_effective_config(self) -> dict[str, Any]:
         """Retorna a configuração efetivamente utilizada nesta instância."""
         return {
+            "container_name": self.container_name,
             "host": self.host,
             "host_port": self.host_port,
             "container_port": self.container_port,

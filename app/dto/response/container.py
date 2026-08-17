@@ -15,6 +15,20 @@ class ContainerComponentResponseDTO(BaseModel):
     installed_at: datetime | None = None
 
 
+def _sanitize_config(cfg: dict | None) -> dict | None:
+    if not cfg or not isinstance(cfg, dict):
+        return cfg
+    sanitized = {}
+    for k, v in cfg.items():
+        if isinstance(v, dict):
+            sanitized[k] = _sanitize_config(v)
+        elif k.lower() in ("password", "secret", "token") or "password" in k.lower() or "secret" in k.lower():
+            sanitized[k] = "********" if v else v
+        else:
+            sanitized[k] = v
+    return sanitized
+
+
 class ContainerResponseDTO(BaseModel):
     model_config = ConfigDict(
         from_attributes=True
@@ -57,12 +71,15 @@ class ContainerResponseDTO(BaseModel):
                     "category": item.component.category,
                     "status": item.status,
                     "installed_version": item.installed_version,
-                    "config": item.config,
+                    "config": _sanitize_config(item.config),
                     "error": item.error,
                     "installed_at": item.installed_at,
                 })
             elif isinstance(item, dict):
-                result.append(item)
+                d = dict(item)
+                if "config" in d:
+                    d["config"] = _sanitize_config(d["config"])
+                result.append(d)
             elif isinstance(item, str):
                 result.append({
                     "slug": item,

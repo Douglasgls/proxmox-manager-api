@@ -51,8 +51,14 @@ class ContainerComponentInstallWorkflow:
             if not container:
                 raise ValueError(f"Container {container_id} não encontrado")
 
+            # Busca componentes já instalados/em progresso para validação de conflito
+            existing_records = self.container_component_service.repository.list_by_container(container.id)
+
             # Resolve os componentes válidos
-            resolved_components = self.component_service.validate_and_resolve_slugs(dto.components)
+            resolved_components = self.component_service.validate_and_resolve_slugs(
+                dto.components,
+                existing_container_components=existing_records,
+            )
 
             # Instancia a sessão do Proxmox para o container
             session = ContainerSession(

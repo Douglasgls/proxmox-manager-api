@@ -21,7 +21,7 @@ class MariadbComponent(DockerApplicationComponent):
         return "mariadb:11"
 
     @property
-    def container_name(self) -> str:
+    def default_container_name(self) -> str:
         return "mariadb-app"
 
     @property

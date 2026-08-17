@@ -26,12 +26,14 @@ from app.core.dependencies import (
     get_access_token_manager,
     get_component_service,
     get_container_component_install_workflow,
+    get_container_component_service,
 )
 from app.dto.response.job import JobCreatedResponseDTO
 from app.services.container_creation_workflow import ContainerCreationWorkflow
 from app.services.container_component_install_workflow import ContainerComponentInstallWorkflow
 from app.services.container_service import ContainerService
 from app.services.component_service import ComponentService
+from app.services.container_component_service import ContainerComponentService
 from app.core.exceptions import DomainValidationError
 from app.security.dependencies import get_current_user
 from app.models.user import User
@@ -302,13 +304,18 @@ def install_components(
     service: ContainerService = Depends(get_container_service),
     component_service: ComponentService = Depends(get_component_service),
     workflow: ContainerComponentInstallWorkflow = Depends(get_container_component_install_workflow),
+    container_component_service: ContainerComponentService = Depends(get_container_component_service),
 ):
-    service.get(id)
+    container = service.get(id)
 
     if not dto.components:
         raise DomainValidationError("A lista de componentes não pode estar vazia.")
 
-    component_service.validate_and_resolve_slugs(dto.components)
+    existing_records = container_component_service.repository.list_by_container(container.id)
+    component_service.validate_and_resolve_slugs(
+        dto.components,
+        existing_container_components=existing_records,
+    )
 
     job_dto = workflow.create_job(container_id=id)
 

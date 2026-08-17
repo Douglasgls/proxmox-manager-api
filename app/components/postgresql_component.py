@@ -21,7 +21,7 @@ class PostgresqlComponent(DockerApplicationComponent):
         return "postgres:16-alpine"
 
     @property
-    def container_name(self) -> str:
+    def default_container_name(self) -> str:
         return "postgres-app"
 
     @property
