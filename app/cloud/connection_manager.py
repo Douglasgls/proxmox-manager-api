@@ -135,7 +135,7 @@ class CloudConnectionManager:
 
         logger.info("JWT expired or missing. Authenticating...")
 
-        jwt_token, expires_at = await self._auth_service.renew_jwt(
+        jwt_token, expires_at, env_id = await self._auth_service.renew_jwt(
             settings,
             cloud_url,
         )
@@ -146,10 +146,13 @@ class CloudConnectionManager:
             if current:
                 current.jwt = jwt_token
                 current.jwt_expires_at = expires_at
+                if env_id:
+                    current.cloud_environment_id = env_id
                 repository.update(current)
                 return current
 
         return settings
+
 
     async def _listen_loop(self) -> None:
         """Loop de recebimento de mensagens. Dispatch para handlers."""

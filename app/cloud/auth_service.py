@@ -21,8 +21,8 @@ class CloudAuthService:
         self,
         cloud_url: str,
         environment_token: str,
-    ) -> tuple[str, datetime]:
-        """Faz POST /agent/auth na Cloud e retorna (jwt, expires_at).
+    ) -> tuple[str, datetime, str | None]:
+        """Faz POST /agent/auth na Cloud e retorna (jwt, expires_at, environment_id).
 
         Raises:
             httpx.HTTPStatusError: se a Cloud rejeitar o token.
@@ -44,9 +44,18 @@ class CloudAuthService:
         expires_in = data["expires_in"]
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
-        logger.info("Authenticated with Cloud. JWT expires in %ds", expires_in)
+        env_id = data.get("environment_id") or data.get("cloud_environment_id")
+        if not env_id:
+            try:
+                import jwt as pyjwt
+                decoded = pyjwt.decode(jwt_token, options={"verify_signature": False})
+                env_id = decoded.get("environment_id") or decoded.get("env_id") or decoded.get("sub")
+            except Exception as exc:
+                logger.debug("Could not decode JWT claims for environment_id: %s", exc)
 
-        return jwt_token, expires_at
+        logger.info("Authenticated with Cloud. JWT expires in %ds (env_id=%s)", expires_in, env_id)
+
+        return jwt_token, expires_at, env_id
 
     def is_jwt_expired(self, expires_at: datetime | None) -> bool:
         """Verifica se o JWT está expirado (com margem de segurança)."""
@@ -64,8 +73,9 @@ class CloudAuthService:
         self,
         settings: AgentSettings,
         cloud_url: str,
-    ) -> tuple[str, datetime]:
+    ) -> tuple[str, datetime, str | None]:
         """Descriptografa o Environment Token e autentica novamente."""
 
         token = crypto.decrypt(settings.environment_token_encrypted)
         return await self.authenticate(cloud_url, token)
+

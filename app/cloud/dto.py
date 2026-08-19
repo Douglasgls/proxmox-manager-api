@@ -7,9 +7,75 @@ from pydantic import BaseModel, ConfigDict, Field, AliasChoices
 class CloudMessage(BaseModel):
     """Mensagem recebida da Cloud."""
 
-    request_id: str
+    model_config = ConfigDict(extra="ignore")
+
+    request_id: str | None = None
+    event_id: str | None = None
+    occurred_at: str | None = None
     type: str
+    version: int | None = 1
+    environment_id: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+    data: dict[str, Any] | None = None
+
+    def get_event_id(self) -> str | None:
+        return self.event_id or self.request_id or self.get_data_dict().get("event_id")
+
+    def get_environment_id(self) -> str | None:
+        return self.environment_id or self.payload.get("environment_id") or self.get_data_dict().get("environment_id")
+
+    def get_data_dict(self) -> dict[str, Any]:
+        if self.data is not None and isinstance(self.data, dict):
+            return self.data
+        return self.payload
+
+
+class NodeSyncEventDataDTO(BaseModel):
+    """Dados de um nó Headscale/Tailscale recebidos em evento delta da Cloud."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    action: str | None = None
+    node_id: str | None = None
+    headscale_node_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("headscale_node_id", "headscale_id")
+    )
+    machine_id: str | None = None
+    hostname: str | None = None
+    tailscale_ip: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("tailscale_ip", "ip")
+    )
+    online: bool | None = None
+    last_seen: str | None = None
+    status: str | None = None
+    container_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("api_local_container_id", "container_id", "target_container_id")
+    )
+
+    cloud_container_id: str | None = None
+    proxmox_container_id: int | None = Field(
+        default=None,
+        validation_alias=AliasChoices("proxmox_container_id", "vmid", "container_number")
+    )
+
+
+
+class NodeSyncEventDTO(BaseModel):
+    """DTO para validação de evento incremental de sincronização de nó."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    event_id: str | None = None
+    request_id: str | None = None
+    type: str
+    version: int = 1
+    environment_id: str | None = None
+    occurred_at: str | None = None
+    data: NodeSyncEventDataDTO = Field(default_factory=NodeSyncEventDataDTO)
+
 
 
 class CloudResponse(BaseModel):
