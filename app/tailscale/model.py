@@ -10,23 +10,30 @@ class TailscaleNode(Base):
     __tablename__ = "tailscale_nodes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    container_id: Mapped[str] = mapped_column(
+    container_id: Mapped[str | None] = mapped_column(
         String,
         ForeignKey("containers.id", ondelete="CASCADE"),
         unique=True,
-        nullable=False,
+        nullable=True,
     )
     
-    proxmox_container_id: Mapped[int] = mapped_column(
+    proxmox_container_id: Mapped[int | None] = mapped_column(
         Integer,
-        nullable=False,
+        nullable=True,
         index=True,
     )
+
+    node_type: Mapped[str] = mapped_column(
+        String(20),
+        default="container",
+    )
+
 
     installed: Mapped[bool] = mapped_column(Boolean, default=False)
     service_running: Mapped[bool] = mapped_column(Boolean, default=False)
     
     version: Mapped[str | None] = mapped_column(String, nullable=True)
+    headscale_node_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     machine_id: Mapped[str | None] = mapped_column(String, nullable=True)
     node_key: Mapped[str | None] = mapped_column(String, nullable=True)
     tailscale_ip: Mapped[str | None] = mapped_column(String, nullable=True)

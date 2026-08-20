@@ -21,6 +21,11 @@ class AgentSettings(Base):
         nullable=True,
     )
 
+    cloud_environment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
+
     jwt: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,

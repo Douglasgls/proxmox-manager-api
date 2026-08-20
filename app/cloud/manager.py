@@ -8,6 +8,7 @@ from app.cloud.handlers.heartbeat import HeartbeatHandler
 from app.cloud.handlers.system import SystemHandler
 from app.cloud.handlers.sync import EnvironmentSyncHandler
 from app.cloud.handlers.container_provision import ContainerProvisionHandler
+from app.cloud.handlers.node_sync import NodeSyncHandler
 from app.cloud.websocket_client import CloudWebSocketClient
 from app.cloud.publisher import EnvironmentChangedPublisher
 
@@ -30,6 +31,11 @@ class CloudManager:
         self._dispatcher.register("system.info", SystemHandler.handle_info)
         self._dispatcher.register("environment.sync", EnvironmentSyncHandler.handle_sync)
         self._dispatcher.register("container.provision", ContainerProvisionHandler.handle_provision)
+        self._dispatcher.register("node.created", NodeSyncHandler.handle_node_event)
+        self._dispatcher.register("node.updated", NodeSyncHandler.handle_node_event)
+        self._dispatcher.register("node.status_changed", NodeSyncHandler.handle_node_event)
+        self._dispatcher.register("node.removed", NodeSyncHandler.handle_node_event)
+
 
 
 

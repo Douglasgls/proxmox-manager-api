@@ -31,6 +31,12 @@ class Container(Base):
         unique=True,
     )
 
+    cloud_container_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
+
     name: Mapped[str] = mapped_column(
         String(100),
         unique=True
@@ -154,5 +160,13 @@ class Container(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    client_connections = relationship(
+        "ClientConnection",
+        back_populates="container",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
 
 
