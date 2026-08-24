@@ -3,6 +3,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.cloud.dto import ContainerProvisionPayloadDTO
+from app.core.hostname import normalize_hostname
 from app.core.event_bus import internal_event_bus, ContainerProvisionCompleted
 from app.repositories.container_repository import ContainerRepository
 from app.tailscale.domain import TailscaleProvisionParams
@@ -99,8 +100,9 @@ class ContainerProvisionService:
 
         logger.info("[%s] Container %s elegível para provisionamento.", request_id, container_id)
 
-        # 4. Instanciar parâmetros de domínio
-        hostname = payload.hostname or container.name or f"ct-{container.container_number}"
+        # 4. Instanciar parâmetros de domínio com hostname normalizado
+        raw_hostname = payload.hostname or container.name or f"ct-{container.container_number}"
+        hostname = normalize_hostname(raw_hostname)
         print(f"\n[PROVISION SERVICE] Container {container_id} elegível! Chamando TailscaleProvisionService.provision (hostname={hostname})...\n")
 
         params = TailscaleProvisionParams(

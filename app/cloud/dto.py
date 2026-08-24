@@ -131,6 +131,11 @@ class ContainerProvisionPayloadDTO(BaseModel):
     headscale_user: str | None = None
 
 
+class PublishedPortDTO(BaseModel):
+    port: int
+    protocol: str = "tcp"
+
+
 class PublishedTailscaleNodeSnapshotDTO(BaseModel):
     installed: bool
     service_running: bool
@@ -144,6 +149,7 @@ class PublishedTailscaleNodeSnapshotDTO(BaseModel):
     dns_name: str | None = None
     last_seen: Optional[Any] = None
     advertised_routes: list[str] = Field(default_factory=list)
+    ports: list[PublishedPortDTO] = Field(default_factory=list)
 
 
 
@@ -160,9 +166,12 @@ class PublishedContainerSnapshotDTO(BaseModel):
     api_local_container_id: str
     container_number: int
     name: str
+    hostname: str | None = None
+    dns_name: str | None = None
     status: str
     tailscale: PublishedTailscaleNodeSnapshotDTO | None = None
     access_tokens: list[PublishedAccessTokenSnapshotDTO] = Field(default_factory=list)
+    ports: list[PublishedPortDTO] = Field(default_factory=list)
 
 
 class EnvironmentDetailsDTO(BaseModel):
