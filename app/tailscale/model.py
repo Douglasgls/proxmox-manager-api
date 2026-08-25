@@ -67,9 +67,14 @@ class TailscaleNode(Base):
 
     @property
     def dns_name(self) -> str | None:
-        """Retorna o DNS Name Tailscale do node."""
+        """Retorna o DNS Name vindo do Tailscale ou no formato <hostname>.interno."""
         if self.status_json and isinstance(self.status_json, dict):
-            return self.status_json.get("Self", {}).get("DNSName")
+            raw_dns = self.status_json.get("Self", {}).get("DNSName")
+            if raw_dns:
+                return raw_dns
+        host = self.hostname
+        if host:
+            return f"{host}.interno"
         return None
 
     @property
