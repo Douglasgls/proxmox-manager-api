@@ -32,6 +32,17 @@ class CloudDispatcher:
     ) -> None:
         """Busca o handler pelo type da mensagem e invoca."""
 
+        if message.success is False or message.error:
+            err_msg = message.error.get("message") if isinstance(message.error, dict) else str(message.error or "Unknown error")
+            err_code = message.error.get("code") if isinstance(message.error, dict) else "ERROR"
+            print(f"\n❌ [RESPOSTA DE ERRO DA CLOUD] A Cloud respondeu com erro para a requisição '{message.request_id}': [{err_code}] {err_msg}\n")
+            logger.error("Cloud returned error (request_id=%s, code=%s): %s", message.request_id, err_code, err_msg)
+            return
+
+        if not message.type:
+            logger.warning("Received message without type or handler: %s", message)
+            return
+
         handler = self._handlers.get(message.type)
 
         if handler:

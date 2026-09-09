@@ -1,6 +1,7 @@
 from uuid import uuid4
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, ForeignKey
+from typing import Any
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -23,6 +24,7 @@ class ClientConnection(Base):
     online: Mapped[bool] = mapped_column(Boolean, default=True)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

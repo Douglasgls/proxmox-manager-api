@@ -12,9 +12,11 @@ class CloudMessage(BaseModel):
     request_id: str | None = None
     event_id: str | None = None
     occurred_at: str | None = None
-    type: str
+    type: str | None = None
     version: int | None = 1
     environment_id: str | None = None
+    success: bool | None = None
+    error: dict[str, Any] | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     data: dict[str, Any] | None = None
 

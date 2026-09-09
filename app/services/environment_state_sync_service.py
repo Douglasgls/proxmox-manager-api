@@ -116,6 +116,8 @@ class EnvironmentStateSyncService:
                     client_conn.last_seen = datetime.fromisoformat(dto.last_seen.replace("Z", "+00:00"))
                 except Exception:
                     pass
+
+            self._update_model_status_json(client_conn, dto)
             client_conn.updated_at = datetime.now(timezone.utc)
             self.db.commit()
             self.db.refresh(client_conn)
@@ -135,12 +137,13 @@ class EnvironmentStateSyncService:
             container_id=container.id if container else None,
             hostname=hostname_val,
             tailscale_ip=dto.tailscale_ip,
-            online=online_status,
-            status="ACTIVE" if online_status else "DISCONNECTED",
+            online=is_online if is_online is not None else True,
+            status="ACTIVE" if (is_online if is_online is not None else True) else "DISCONNECTED",
             last_seen=last_seen_dt,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
+        self._update_model_status_json(new_conn, dto)
 
         self.db.add(new_conn)
         self.db.commit()
@@ -340,28 +343,16 @@ class EnvironmentStateSyncService:
         return {"processed": len(dto_list), "pruned": pruned_count}
 
     @staticmethod
-    def _patch_node(node: TailscaleNode, dto: NodeSyncEventDataDTO) -> None:
-        """Atualiza atomicamente apenas os campos fornecidos no DTO."""
-        if dto.node_id is not None:
-            node.headscale_node_id = dto.node_id
-
-        if dto.machine_id is not None:
-            node.machine_id = dto.machine_id
-
-        if dto.node_key is not None:
-            node.node_key = dto.node_key
-
-        if dto.tailscale_ip is not None:
-            node.tailscale_ip = dto.tailscale_ip
-
-        # Manter/Atualizar a estrutura status_json
-        status_dict = dict(node.status_json) if (node.status_json and isinstance(node.status_json, dict)) else {"Self": {}}
+    def _update_model_status_json(model_inst, dto: NodeSyncEventDataDTO) -> None:
+        """Mantém e atualiza o dicionário status_json do modelo no banco de dados."""
+        status_dict = dict(model_inst.status_json) if (getattr(model_inst, "status_json", None) and isinstance(model_inst.status_json, dict)) else {"Self": {}}
         self_info = dict(status_dict.get("Self", {}))
 
         is_online = dto.online if dto.online is not None else dto.connected
         if is_online is not None:
             self_info["Online"] = is_online
-            node.service_running = is_online
+            if hasattr(model_inst, "service_running"):
+                model_inst.service_running = is_online
 
         if dto.hostname is not None:
             self_info["HostName"] = dto.hostname
@@ -394,5 +385,22 @@ class EnvironmentStateSyncService:
             self_info["LastSeen"] = dto.last_seen
 
         status_dict["Self"] = self_info
-        node.status_json = status_dict
+        model_inst.status_json = status_dict
+
+    @classmethod
+    def _patch_node(cls, node: TailscaleNode, dto: NodeSyncEventDataDTO) -> None:
+        """Atualiza atomicamente apenas os campos fornecidos no DTO."""
+        if dto.node_id is not None:
+            node.headscale_node_id = dto.node_id
+
+        if dto.machine_id is not None:
+            node.machine_id = dto.machine_id
+
+        if dto.node_key is not None:
+            node.node_key = dto.node_key
+
+        if dto.tailscale_ip is not None:
+            node.tailscale_ip = dto.tailscale_ip
+
+        cls._update_model_status_json(node, dto)
         node.last_sync = datetime.now(timezone.utc)
