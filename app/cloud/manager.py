@@ -35,6 +35,7 @@ class CloudManager:
         self._dispatcher.register("node.updated", NodeSyncHandler.handle_node_event)
         self._dispatcher.register("node.status_changed", NodeSyncHandler.handle_node_event)
         self._dispatcher.register("node.removed", NodeSyncHandler.handle_node_event)
+        self._dispatcher.register("node.sync.response", NodeSyncHandler.handle_node_event)
 
 
 

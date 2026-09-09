@@ -61,6 +61,25 @@ class NodeSyncEventDataDTO(BaseModel):
         validation_alias=AliasChoices("proxmox_container_id", "vmid", "container_number")
     )
 
+    name: str | None = None
+    machine_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("machine_key", "MachineKey")
+    )
+    node_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("node_key", "NodeKey")
+    )
+    headscale_user: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("headscale_user", "user", "User")
+    )
+    tags: list[str] | str | None = None
+    ephemeral: bool | None = None
+    expiration: str | None = None
+    expired: bool | None = None
+    connected: bool | None = None
+
 
 
 class NodeSyncEventDTO(BaseModel):

@@ -93,7 +93,7 @@ class EnvironmentStateSyncService:
         # 3. Caso seja um nó de cliente VPN (dispositivo/usuário externo)
         client_conn = self._find_client_connection(dto)
         hs_id = str(dto.headscale_node_id or dto.node_id or "")
-        online_status = dto.online if dto.online is not None else True
+        is_online = dto.online if dto.online is not None else (dto.connected if dto.connected is not None else True)
         hostname_val = dto.hostname or "client-device"
 
         if client_conn:
@@ -106,9 +106,11 @@ class EnvironmentStateSyncService:
                 client_conn.hostname = dto.hostname
             if dto.tailscale_ip:
                 client_conn.tailscale_ip = dto.tailscale_ip
-            if dto.online is not None:
-                client_conn.online = dto.online
-                client_conn.status = "ACTIVE" if dto.online else "DISCONNECTED"
+
+            if is_online is not None:
+                client_conn.online = is_online
+                client_conn.status = "ACTIVE" if is_online else "DISCONNECTED"
+
             if dto.last_seen:
                 try:
                     client_conn.last_seen = datetime.fromisoformat(dto.last_seen.replace("Z", "+00:00"))
@@ -257,6 +259,81 @@ class EnvironmentStateSyncService:
 
         return None
 
+    def reconcile_full_snapshot(self, dto_list: list[NodeSyncEventDataDTO]) -> dict[str, int]:
+        """Reconcilia a lista completa de nós recebidos no snapshot da Cloud.
+
+        1. Aplica upsert/patch em cada nó recebido.
+        2. Realiza o expurgo (pruning) dos registros locais que não existem mais no snapshot da Cloud.
+        """
+        logger.info("Starting full snapshot reconciliation for %d nodes...", len(dto_list))
+        valid_hs_ids: set[str] = set()
+
+        for dto in dto_list:
+            hs_id = str(dto.headscale_node_id or dto.node_id or "")
+            if hs_id:
+                valid_hs_ids.add(hs_id)
+            if dto.machine_id:
+                valid_hs_ids.add(str(dto.machine_id))
+            if dto.cloud_container_id:
+                valid_hs_ids.add(str(dto.cloud_container_id))
+            if dto.tailscale_ip:
+                valid_hs_ids.add(str(dto.tailscale_ip))
+            if dto.hostname:
+                valid_hs_ids.add(str(dto.hostname))
+
+            self.upsert_node_state(dto)
+
+        # Expurgo (Pruning) de ClientConnections inexistentes no snapshot
+        pruned_count = 0
+        all_clients = self.db.query(ClientConnection).all()
+        for client in all_clients:
+            c_hs_id = str(client.headscale_node_id or client.cloud_connection_id or "")
+            c_ip = str(client.tailscale_ip or "")
+            c_host = str(client.hostname or "")
+
+            is_valid = (
+                (c_hs_id and c_hs_id in valid_hs_ids) or
+                (c_ip and c_ip in valid_hs_ids) or
+                (c_host and c_host in valid_hs_ids)
+            )
+
+            if not is_valid:
+                logger.info("Pruning obsolete ClientConnection (id=%s, headscale_node_id=%s)", client.id, client.headscale_node_id)
+                self.db.delete(client)
+                pruned_count += 1
+
+        # Expurgo/Desativação de TailscaleNodes inexistentes no snapshot
+        all_tailscale_nodes = self.db.query(TailscaleNode).all()
+        for node in all_tailscale_nodes:
+            n_hs_id = str(node.headscale_node_id or node.machine_id or "")
+            n_ip = str(node.tailscale_ip or "")
+            n_host = str(node.hostname or "")
+
+            is_valid = (
+                (n_hs_id and n_hs_id in valid_hs_ids) or
+                (n_ip and n_ip in valid_hs_ids) or
+                (n_host and n_host in valid_hs_ids)
+            )
+
+            if not is_valid:
+                if not node.container_id:
+                    logger.info("Pruning unlinked obsolete TailscaleNode (id=%s, headscale_node_id=%s)", node.id, node.headscale_node_id)
+                    self.db.delete(node)
+                    pruned_count += 1
+                else:
+                    # Se está vinculado a um container local, marcar como offline/desconectado
+                    logger.info("Marking container TailscaleNode offline as it was not in Cloud snapshot (id=%s)", node.id)
+                    node.service_running = False
+                    status_dict = dict(node.status_json) if (node.status_json and isinstance(node.status_json, dict)) else {"Self": {}}
+                    self_info = dict(status_dict.get("Self", {}))
+                    self_info["Online"] = False
+                    status_dict["Self"] = self_info
+                    node.status_json = status_dict
+
+        self.db.commit()
+        logger.info("Full snapshot reconciliation finished. Processed=%d, Pruned=%d", len(dto_list), pruned_count)
+        return {"processed": len(dto_list), "pruned": pruned_count}
+
     @staticmethod
     def _patch_node(node: TailscaleNode, dto: NodeSyncEventDataDTO) -> None:
         """Atualiza atomicamente apenas os campos fornecidos no DTO."""
@@ -266,6 +343,9 @@ class EnvironmentStateSyncService:
         if dto.machine_id is not None:
             node.machine_id = dto.machine_id
 
+        if dto.node_key is not None:
+            node.node_key = dto.node_key
+
         if dto.tailscale_ip is not None:
             node.tailscale_ip = dto.tailscale_ip
 
@@ -273,12 +353,37 @@ class EnvironmentStateSyncService:
         status_dict = dict(node.status_json) if (node.status_json and isinstance(node.status_json, dict)) else {"Self": {}}
         self_info = dict(status_dict.get("Self", {}))
 
-        if dto.online is not None:
-            self_info["Online"] = dto.online
-            node.service_running = dto.online
+        is_online = dto.online if dto.online is not None else dto.connected
+        if is_online is not None:
+            self_info["Online"] = is_online
+            node.service_running = is_online
 
         if dto.hostname is not None:
             self_info["HostName"] = dto.hostname
+
+        if dto.name is not None:
+            self_info["Name"] = dto.name
+
+        if dto.machine_key is not None:
+            self_info["MachineKey"] = dto.machine_key
+
+        if dto.node_key is not None:
+            self_info["NodeKey"] = dto.node_key
+
+        if dto.headscale_user is not None:
+            self_info["User"] = dto.headscale_user
+
+        if dto.tags is not None:
+            self_info["Tags"] = dto.tags
+
+        if dto.ephemeral is not None:
+            self_info["Ephemeral"] = dto.ephemeral
+
+        if dto.expiration is not None:
+            self_info["Expiration"] = dto.expiration
+
+        if dto.expired is not None:
+            self_info["Expired"] = dto.expired
 
         if dto.last_seen is not None:
             self_info["LastSeen"] = dto.last_seen
