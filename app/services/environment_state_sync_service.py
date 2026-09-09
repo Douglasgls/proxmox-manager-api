@@ -265,6 +265,7 @@ class EnvironmentStateSyncService:
         1. Aplica upsert/patch em cada nó recebido.
         2. Realiza o expurgo (pruning) dos registros locais que não existem mais no snapshot da Cloud.
         """
+        print(f"\n--- [RECONCILIAÇÃO BD LOCAL] Iniciando atualização para {len(dto_list)} nós da Cloud ---")
         logger.info("Starting full snapshot reconciliation for %d nodes...", len(dto_list))
         valid_hs_ids: set[str] = set()
 
@@ -298,6 +299,7 @@ class EnvironmentStateSyncService:
             )
 
             if not is_valid:
+                print(f"  ❌ Expurgo (Deletando do BD local): ClientConnection (hostname={client.hostname}, IP={client.tailscale_ip}, hs_id={client.headscale_node_id})")
                 logger.info("Pruning obsolete ClientConnection (id=%s, headscale_node_id=%s)", client.id, client.headscale_node_id)
                 self.db.delete(client)
                 pruned_count += 1
@@ -317,11 +319,13 @@ class EnvironmentStateSyncService:
 
             if not is_valid:
                 if not node.container_id:
+                    print(f"  ❌ Expurgo (Deletando do BD local): TailscaleNode não vinculado (hs_id={node.headscale_node_id}, IP={node.tailscale_ip})")
                     logger.info("Pruning unlinked obsolete TailscaleNode (id=%s, headscale_node_id=%s)", node.id, node.headscale_node_id)
                     self.db.delete(node)
                     pruned_count += 1
                 else:
                     # Se está vinculado a um container local, marcar como offline/desconectado
+                    print(f"  ⚠️ Marcando Container TailscaleNode como offline (container_id={node.container_id})")
                     logger.info("Marking container TailscaleNode offline as it was not in Cloud snapshot (id=%s)", node.id)
                     node.service_running = False
                     status_dict = dict(node.status_json) if (node.status_json and isinstance(node.status_json, dict)) else {"Self": {}}
@@ -331,6 +335,7 @@ class EnvironmentStateSyncService:
                     node.status_json = status_dict
 
         self.db.commit()
+        print(f"--- [RECONCILIAÇÃO CONCLUÍDA] Reconciliados: {len(dto_list)} | Deletados do BD: {pruned_count} ---\n")
         logger.info("Full snapshot reconciliation finished. Processed=%d, Pruned=%d", len(dto_list), pruned_count)
         return {"processed": len(dto_list), "pruned": pruned_count}
 

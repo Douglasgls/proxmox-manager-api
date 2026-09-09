@@ -46,13 +46,11 @@ class EventBus:
         if channel not in self._channels:
             self._channels[channel] = set()
         self._channels[channel].add(subscriber)
-        print(f"[EventBus DEBUG] Registrando subscriber no canal '{channel}'. Total de inscritos: {len(self._channels[channel])}")
         logger.debug(f"Registered subscriber to channel: {channel}. Total subscribers: {len(self._channels[channel])}")
 
     def unregister(self, channel: str, subscriber: Subscriber):
         if channel in self._channels:
             self._channels[channel].discard(subscriber)
-            print(f"[EventBus DEBUG] Desregistrando subscriber do canal '{channel}'. Restantes: {len(self._channels[channel])}")
             logger.debug(f"Unregistered subscriber from channel: {channel}. Remaining subscribers: {len(self._channels[channel])}")
             if not self._channels[channel]:
                 del self._channels[channel]
@@ -67,7 +65,6 @@ class EventBus:
 
     async def publish(self, channel: str, data: dict):
         subscribers = list(self._channels.get(channel, []))
-        print(f"[EventBus DEBUG] Publicando no canal '{channel}'. Inscritos ativos: {len(subscribers)}")
         if not subscribers:
             return
         

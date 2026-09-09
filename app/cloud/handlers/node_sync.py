@@ -100,6 +100,10 @@ class NodeSyncHandler:
 
                 # 4b. Tratar resposta de Snapshot Completo (Full Sync + Prune)
                 if is_full_sync:
+                    print(f"\n==================================================")
+                    print(f"[WS RECEBIDO] Snapshot Completo de Nós Recebido da Cloud! (Tipo: {message.type}, Total no Payload: {len(items_to_process)})")
+                    print(f"==================================================")
+
                     dto_list = []
                     for item in items_to_process:
                         try:
@@ -109,6 +113,7 @@ class NodeSyncHandler:
                             continue
 
                     res = sync_service.reconcile_full_snapshot(dto_list)
+                    print(f"[WS PROCESSADO] Snapshot Aplicado com Sucesso! {res['processed']} nós reconciliados, {res['pruned']} nós obsoletos expurgados.\n")
                     logger.info("[sync_full_applied] Full snapshot reconciled: processed=%d, pruned=%d", res["processed"], res["pruned"])
                 else:
                     # Processar eventos incrementais de deltas
@@ -122,12 +127,14 @@ class NodeSyncHandler:
                         action = (data_dto.action or "").upper()
                         if action in ("NODE_REMOVED", "NODE_DELETED") or message.type == "node.removed":
                             removed = sync_service.remove_node_state(data_dto)
+                            print(f"[WS DELTA] Remoção de nó processada (node_id={data_dto.node_id}, removido={removed})")
                             logger.info("[node_removed] Node removal processed (node_id=%s, removed=%s)", data_dto.node_id, removed)
                         else:
                             updated_node = sync_service.upsert_node_state(data_dto)
                             if updated_node:
                                 node_identifier = getattr(updated_node, "headscale_node_id", None) or getattr(updated_node, "machine_id", None) or getattr(updated_node, "cloud_connection_id", None)
                                 node_kind = getattr(updated_node, "node_type", "client")
+                                print(f"[WS DELTA] Nó atualizado (identificador={node_identifier}, tipo={node_kind}, online={updated_node.online})")
                                 logger.info(
                                     "[sync_delta_applied] Node '%s' state updated successfully (node_id=%s, type=%s, online=%s)",
                                     message.type,
