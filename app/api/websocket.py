@@ -18,9 +18,36 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
+            msg_type = data.get("type")
             action = data.get("action")
             channel = data.get("channel")
-            
+
+            # Suporte a solicitação de sync enviada diretamente pelo Frontend no WebSocket local (/ws)
+            if msg_type == "node.sync.request" or action == "node.sync.request":
+                print("[WS LOCAL] Solicitação 'node.sync.request' recebida do Frontend no WebSocket local.")
+                from app.cloud.manager import cloud_manager
+                from app.database.session import SessionLocal
+                from app.cloud.repository import AgentSettingsRepository
+
+                with SessionLocal() as db:
+                    settings = AgentSettingsRepository(db).get()
+                    env_id = settings.cloud_environment_id if settings else None
+
+                if cloud_manager.connection_manager._ws_client.is_connected:
+                    await cloud_manager.connection_manager.request_node_sync(environment_id=env_id)
+                    await websocket.send_json({
+                        "type": "node.sync.requested",
+                        "status": "ok",
+                        "message": "Node sync request forwarded to Cloud."
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "node.sync.error",
+                        "status": "error",
+                        "message": "WebSocket connection to Cloud is not active."
+                    })
+                continue
+
             if not action or not channel:
                 logger.warning(f"Invalid message format received on WebSocket: {data}")
                 continue

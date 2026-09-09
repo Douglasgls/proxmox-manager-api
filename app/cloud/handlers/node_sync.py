@@ -115,6 +115,18 @@ class NodeSyncHandler:
                     res = sync_service.reconcile_full_snapshot(dto_list)
                     print(f"[WS PROCESSADO] Snapshot Aplicado com Sucesso! {res['processed']} nós reconciliados, {res['pruned']} nós obsoletos expurgados.\n")
                     logger.info("[sync_full_applied] Full snapshot reconciled: processed=%d, pruned=%d", res["processed"], res["pruned"])
+
+                    # Notificar clientes conectados no WebSocket local (/ws)
+                    try:
+                        from app.core.event_bus import event_bus
+                        await event_bus.broadcast({
+                            "type": "nodes.updated",
+                            "status": "reconciled",
+                            "processed": res["processed"],
+                            "pruned": res["pruned"],
+                        })
+                    except Exception as eb_err:
+                        logger.warning("Failed to broadcast nodes.updated on event_bus: %s", eb_err)
                 else:
                     # Processar eventos incrementais de deltas
                     for item in items_to_process:
