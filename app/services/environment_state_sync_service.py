@@ -252,68 +252,75 @@ class EnvironmentStateSyncService:
 
         1. Aplica upsert/patch em cada nó recebido.
         2. Realiza o expurgo (pruning) dos registros locais que não existem mais no snapshot da Cloud.
+
+        Usa headscale_node_id como chave primária de validação (fonte da verdade: Headscale).
         """
-        print(f"\n--- [RECONCILIAÇÃO BD LOCAL] Iniciando atualização para {len(dto_list)} nós da Cloud ---")
+        print(f"\n{'='*60}")
+        print(f"[RECONCILIAÇÃO] Iniciando para {len(dto_list)} nós recebidos da Cloud")
+        print(f"{'='*60}")
         logger.info("Starting full snapshot reconciliation for %d nodes...", len(dto_list))
+
+        # Sets de validação: headscale_node_id é a chave primária, IP é fallback
         valid_hs_ids: set[str] = set()
+        valid_ips: set[str] = set()
 
         for dto in dto_list:
             hs_id = str(dto.headscale_node_id or dto.node_id or "")
             if hs_id:
                 valid_hs_ids.add(hs_id)
-            if dto.machine_id:
-                valid_hs_ids.add(str(dto.machine_id))
-            if dto.cloud_container_id:
-                valid_hs_ids.add(str(dto.cloud_container_id))
             if dto.tailscale_ip:
-                valid_hs_ids.add(str(dto.tailscale_ip))
-            if dto.hostname:
-                valid_hs_ids.add(str(dto.hostname))
+                valid_ips.add(dto.tailscale_ip)
 
+            print(f"  ✅ Node recebido: hs_id={hs_id}, hostname={dto.hostname}, ip={dto.tailscale_ip}, online={dto.online}")
             self.upsert_node_state(dto)
+
+        print(f"\n  [PRUNING] IDs válidos do Headscale: {valid_hs_ids}")
+        print(f"  [PRUNING] IPs válidos (fallback): {valid_ips}")
 
         # Expurgo (Pruning) de ClientConnections inexistentes no snapshot
         pruned_count = 0
         all_clients = self.db.query(ClientConnection).all()
+        print(f"\n  [PRUNING] Verificando {len(all_clients)} ClientConnections no BD local...")
         for client in all_clients:
-            c_hs_id = str(client.headscale_node_id or client.cloud_connection_id or "")
+            c_hs_id = str(client.headscale_node_id or "")
             c_ip = str(client.tailscale_ip or "")
-            c_host = str(client.hostname or "")
 
-            is_valid = (
-                (c_hs_id and c_hs_id in valid_hs_ids) or
-                (c_ip and c_ip in valid_hs_ids) or
-                (c_host and c_host in valid_hs_ids)
-            )
+            # Critério: headscale_node_id é a chave primária.
+            # IP é fallback apenas se o registro não tem headscale_node_id.
+            if c_hs_id:
+                is_valid = c_hs_id in valid_hs_ids
+            else:
+                is_valid = c_ip and c_ip in valid_ips
+
+            print(f"    - ClientConnection: hostname={client.hostname}, hs_id={c_hs_id}, ip={c_ip} → {'VÁLIDO ✅' if is_valid else 'OBSOLETO ❌'}")
 
             if not is_valid:
-                print(f"  ❌ Expurgo (Deletando do BD local): ClientConnection (hostname={client.hostname}, IP={client.tailscale_ip}, hs_id={client.headscale_node_id})")
-                logger.info("Pruning obsolete ClientConnection (id=%s, headscale_node_id=%s)", client.id, client.headscale_node_id)
+                logger.info("Pruning obsolete ClientConnection (id=%s, headscale_node_id=%s, hostname=%s)", client.id, client.headscale_node_id, client.hostname)
                 self.db.delete(client)
                 pruned_count += 1
 
         # Expurgo/Desativação de TailscaleNodes inexistentes no snapshot
         all_tailscale_nodes = self.db.query(TailscaleNode).all()
+        print(f"\n  [PRUNING] Verificando {len(all_tailscale_nodes)} TailscaleNodes no BD local...")
         for node in all_tailscale_nodes:
-            n_hs_id = str(node.headscale_node_id or node.machine_id or "")
+            n_hs_id = str(node.headscale_node_id or "")
             n_ip = str(node.tailscale_ip or "")
-            n_host = str(node.hostname or "")
 
-            is_valid = (
-                (n_hs_id and n_hs_id in valid_hs_ids) or
-                (n_ip and n_ip in valid_hs_ids) or
-                (n_host and n_host in valid_hs_ids)
-            )
+            if n_hs_id:
+                is_valid = n_hs_id in valid_hs_ids
+            else:
+                is_valid = n_ip and n_ip in valid_ips
+
+            print(f"    - TailscaleNode: hs_id={n_hs_id}, ip={n_ip}, container_id={node.container_id} → {'VÁLIDO ✅' if is_valid else 'OBSOLETO ❌'}")
 
             if not is_valid:
                 if not node.container_id:
-                    print(f"  ❌ Expurgo (Deletando do BD local): TailscaleNode não vinculado (hs_id={node.headscale_node_id}, IP={node.tailscale_ip})")
                     logger.info("Pruning unlinked obsolete TailscaleNode (id=%s, headscale_node_id=%s)", node.id, node.headscale_node_id)
                     self.db.delete(node)
                     pruned_count += 1
                 else:
                     # Se está vinculado a um container local, marcar como offline/desconectado
-                    print(f"  ⚠️ Marcando Container TailscaleNode como offline (container_id={node.container_id})")
+                    print(f"      ⚠️ Vinculado a container — marcando como offline")
                     logger.info("Marking container TailscaleNode offline as it was not in Cloud snapshot (id=%s)", node.id)
                     node.service_running = False
                     status_dict = dict(node.status_json) if (node.status_json and isinstance(node.status_json, dict)) else {"Self": {}}
@@ -323,7 +330,9 @@ class EnvironmentStateSyncService:
                     node.status_json = status_dict
 
         self.db.commit()
-        print(f"--- [RECONCILIAÇÃO CONCLUÍDA] Reconciliados: {len(dto_list)} | Deletados do BD: {pruned_count} ---\n")
+        print(f"\n{'='*60}")
+        print(f"[RECONCILIAÇÃO CONCLUÍDA] Reconciliados: {len(dto_list)} | Expurgados: {pruned_count}")
+        print(f"{'='*60}\n")
         logger.info("Full snapshot reconciliation finished. Processed=%d, Pruned=%d", len(dto_list), pruned_count)
         return {"processed": len(dto_list), "pruned": pruned_count}
 
