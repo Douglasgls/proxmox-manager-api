@@ -172,7 +172,7 @@ class EnvironmentStateSyncService:
 
 
     def _find_tailscale_node(self, dto: NodeSyncEventDataDTO) -> TailscaleNode | None:
-        """Busca nó Tailscale por headscale_node_id -> node_id -> machine_id -> tailscale_ip -> container_id."""
+        """Busca nó Tailscale por headscale_node_id -> node_id -> machine_id -> container_id."""
         query = self.db.query(TailscaleNode)
 
         target_hs_id = str(dto.headscale_node_id or dto.node_id or "")
@@ -191,11 +191,6 @@ class EnvironmentStateSyncService:
             if found:
                 return found
 
-        if dto.tailscale_ip:
-            found = query.filter(TailscaleNode.tailscale_ip == dto.tailscale_ip).first()
-            if found:
-                return found
-
         if dto.container_id:
             found = query.filter(TailscaleNode.container_id == dto.container_id).first()
             if found:
@@ -209,7 +204,7 @@ class EnvironmentStateSyncService:
         return None
 
     def _find_client_connection(self, dto: NodeSyncEventDataDTO) -> ClientConnection | None:
-        """Busca conexão de cliente VPN por headscale_node_id -> cloud_connection_id -> tailscale_ip -> hostname."""
+        """Busca conexão de cliente VPN por headscale_node_id -> cloud_connection_id."""
         query = self.db.query(ClientConnection)
 
         target_hs_id = str(dto.headscale_node_id or dto.node_id or "")
@@ -220,16 +215,6 @@ class EnvironmentStateSyncService:
 
         if dto.node_id:
             found = query.filter(ClientConnection.cloud_connection_id == dto.node_id).first()
-            if found:
-                return found
-
-        if dto.tailscale_ip:
-            found = query.filter(ClientConnection.tailscale_ip == dto.tailscale_ip).first()
-            if found:
-                return found
-
-        if dto.hostname:
-            found = query.filter(ClientConnection.hostname == dto.hostname).first()
             if found:
                 return found
 
