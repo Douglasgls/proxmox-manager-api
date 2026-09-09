@@ -103,6 +103,8 @@ class NodeSyncHandler:
                     print(f"\n==================================================")
                     print(f"[WS RECEBIDO] Snapshot Completo de Nós Recebido da Cloud! (Tipo: {message.type}, Total no Payload: {len(items_to_process)})")
                     print(f"==================================================")
+                    for i, item in enumerate(items_to_process):
+                        print(f"  Payload Node[{i}]: hs_id={item.get('headscale_node_id')}, hostname={item.get('hostname')}, ip={item.get('tailscale_ip')}, online={item.get('online')}")
 
                     dto_list = []
                     for item in items_to_process:

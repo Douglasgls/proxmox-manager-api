@@ -181,6 +181,9 @@ def cloud_details():
                 online_count += 1
 
             c_name = c.container.name if c.container else None
+            status_dict = c.status_json if (c.status_json and isinstance(c.status_json, dict)) else {}
+            self_info = status_dict.get("Self", {}) if isinstance(status_dict, dict) else {}
+
             nodes_list.append({
                 "headscale_node_id": c.headscale_node_id,
                 "cloud_connection_id": c.cloud_connection_id,
@@ -190,18 +193,18 @@ def cloud_details():
                 "service_running": is_online,
                 "node_type": "client",
                 "hostname": c.hostname,
-                "name": c.hostname,
-                "machine_key": None,
-                "node_key": None,
-                "user": None,
-                "tags": [],
-                "ephemeral": False,
-                "expiration": "N/A",
-                "expired": False,
+                "name": self_info.get("Name") or c.hostname,
+                "machine_key": self_info.get("MachineKey"),
+                "node_key": self_info.get("NodeKey"),
+                "user": self_info.get("User"),
+                "tags": self_info.get("Tags") or [],
+                "ephemeral": self_info.get("Ephemeral", False),
+                "expiration": self_info.get("Expiration") or "N/A",
+                "expired": self_info.get("Expired", False),
                 "container_id": c.container_id,
                 "proxmox_container_id": c.container.container_number if c.container else None,
                 "container_name": c_name,
-                "last_seen": c.last_seen.isoformat() if c.last_seen else None,
+                "last_seen": self_info.get("LastSeen") or (c.last_seen.isoformat() if c.last_seen else None),
                 "last_sync": c.updated_at.isoformat() if c.updated_at else None,
             })
 
