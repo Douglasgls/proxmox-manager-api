@@ -14,15 +14,19 @@ class JobEventManager:
         print(f"[JobEvents DEBUG] publish chamado para job_id={job_id} com event={event.get('event')}. Status do Job={event.get('status')}")
         
         if self.loop and self.loop.is_running():
-            print(f"[JobEvents DEBUG] Agendando publicação no loop principal de forma thread-safe...")
-            asyncio.run_coroutine_threadsafe(
-                event_bus.publish(f"jobs.{job_id}", event),
-                self.loop
-            )
-            asyncio.run_coroutine_threadsafe(
-                event_bus.publish("jobs", event),
-                self.loop
-            )
+            print(f"[JobEvents DEBUG] Agendando publicação no loop principal...")
+            try:
+                current_loop = asyncio.get_running_loop()
+                is_same_loop = (current_loop is self.loop)
+            except RuntimeError:
+                is_same_loop = False
+                
+            if is_same_loop:
+                self.loop.create_task(event_bus.publish(f"jobs.{job_id}", event))
+                self.loop.create_task(event_bus.publish("jobs", event))
+            else:
+                asyncio.run_coroutine_threadsafe(event_bus.publish(f"jobs.{job_id}", event), self.loop)
+                asyncio.run_coroutine_threadsafe(event_bus.publish("jobs", event), self.loop)
         else:
             print(f"[JobEvents DEBUG] Loop principal indisponível ou inativo. Tentando publicar no loop da thread atual...")
             try:
