@@ -98,6 +98,25 @@ class CloudConnectionManager:
         print(f"\n[WS ENVIADO] Enviando mensagem via WebSocket: {message}\n")
         await self._ws_client.send(message)
 
+    async def request_node_sync(self, environment_id: str | None = None) -> bool:
+        """Envia solicitação de snapshot completo de nós (node.sync.request) para a Cloud."""
+        if not self._running or not self._ws_client.is_connected:
+            logger.warning("Cannot request node sync: WebSocket is not connected.")
+            return False
+
+        from uuid import uuid4
+        import json
+        payload = {
+            "request_id": f"req_{uuid4().hex[:12]}",
+            "origin": "agent",
+            "type": "node.sync.request",
+            "version": 1,
+            "environment_id": environment_id,
+            "payload": {}
+        }
+        await self.send_message(json.dumps(payload))
+        return True
+
     async def _connect_with_auth(self, settings: AgentSettings) -> None:
         """Garante JWT válido e abre conexão WebSocket."""
 

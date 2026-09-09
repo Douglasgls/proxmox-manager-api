@@ -147,17 +147,30 @@ def cloud_details():
                 online_count += 1
 
             c_name = n.container.name if n.container else None
+            status_dict = n.status_json if (n.status_json and isinstance(n.status_json, dict)) else {}
+            self_info = status_dict.get("Self", {}) if isinstance(status_dict, dict) else {}
+
             nodes_list.append({
                 "headscale_node_id": n.headscale_node_id,
                 "machine_id": n.machine_id,
                 "tailscale_ip": n.tailscale_ip,
                 "online": is_online,
+                "connected": is_online,
                 "service_running": n.service_running,
                 "node_type": "container",
                 "hostname": n.hostname or c_name,
+                "name": self_info.get("Name") or n.hostname or c_name,
+                "machine_key": self_info.get("MachineKey") or n.machine_id,
+                "node_key": self_info.get("NodeKey") or n.node_key,
+                "user": self_info.get("User"),
+                "tags": self_info.get("Tags") or [],
+                "ephemeral": self_info.get("Ephemeral", False),
+                "expiration": self_info.get("Expiration") or "N/A",
+                "expired": self_info.get("Expired", False),
                 "container_id": n.container_id,
                 "proxmox_container_id": n.proxmox_container_id,
                 "container_name": c_name,
+                "last_seen": self_info.get("LastSeen"),
                 "last_sync": n.last_sync.isoformat() if n.last_sync else None,
             })
 
@@ -173,12 +186,22 @@ def cloud_details():
                 "cloud_connection_id": c.cloud_connection_id,
                 "tailscale_ip": c.tailscale_ip,
                 "online": is_online,
+                "connected": is_online,
                 "service_running": is_online,
                 "node_type": "client",
                 "hostname": c.hostname,
+                "name": c.hostname,
+                "machine_key": None,
+                "node_key": None,
+                "user": None,
+                "tags": [],
+                "ephemeral": False,
+                "expiration": "N/A",
+                "expired": False,
                 "container_id": c.container_id,
                 "proxmox_container_id": c.container.container_number if c.container else None,
                 "container_name": c_name,
+                "last_seen": c.last_seen.isoformat() if c.last_seen else None,
                 "last_sync": c.updated_at.isoformat() if c.updated_at else None,
             })
 
@@ -207,7 +230,6 @@ def cloud_details():
 
 
 @router.post(
-
     "/cloud/reconnect",
     summary="Reconectar com a Cloud",
 )
@@ -227,5 +249,43 @@ async def reconnect_agent():
     return {
         "status": "reconnecting",
         "message": "Reconnection triggered.",
+    }
+
+
+@router.post(
+    "/cloud/sync",
+    summary="Solicitar Sincronização Completa de Nós com a Cloud",
+    description="Envia uma solicitação via WebSocket para a Cloud atualizar o snapshot de todos os nós Headscale e clientes VPN.",
+)
+async def sync_cloud_nodes():
+    with SessionLocal() as db:
+        repository = AgentSettingsRepository(db)
+        settings = repository.get()
+
+    if not settings or not settings.environment_token_encrypted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Agent is not registered yet.",
+        )
+
+    if not cloud_manager.connection_manager._ws_client.is_connected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="WebSocket connection to Cloud is not active.",
+        )
+
+    sent = await cloud_manager.connection_manager.request_node_sync(
+        environment_id=settings.cloud_environment_id
+    )
+
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send node sync request via WebSocket.",
+        )
+
+    return {
+        "status": "sync_requested",
+        "message": "Node synchronization request sent to Cloud via WebSocket.",
     }
 

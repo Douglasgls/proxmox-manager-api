@@ -62,20 +62,22 @@ class NodeSyncHandler:
             logger.warning("[event_rejected] Unsupported contract version: %s (event_id=%s)", message.version, event_id)
             if message.request_id:
                 await send(build_error(request_id=message.request_id, code="UNSUPPORTED_VERSION", message="Version not supported"))
-            return
-
-        # 3. Processar deltas (suporta lista 'deltas' ou objeto único em data/payload)
+                 # 3. Processar deltas ou snapshot (suporta 'nodes', 'deltas' ou objeto único)
         raw_data = message.get_data_dict()
-        deltas_list = raw_data.get("deltas") if isinstance(raw_data, dict) else None
+        nodes_list = None
+        if isinstance(raw_data, dict):
+            nodes_list = raw_data.get("nodes") or raw_data.get("deltas")
 
         items_to_process = []
-        if isinstance(deltas_list, list) and len(deltas_list) > 0:
-            items_to_process = [d for d in deltas_list if isinstance(d, dict)]
+        is_full_sync = message.type == "node.sync.response" or (isinstance(nodes_list, list) and message.type.endswith(".response"))
+
+        if isinstance(nodes_list, list):
+            items_to_process = [d for d in nodes_list if isinstance(d, dict)]
         elif isinstance(raw_data, dict):
             items_to_process = [raw_data]
 
-        if not items_to_process:
-            logger.warning("[event_rejected] No valid delta items found in event '%s'", message.type)
+        if not items_to_process and not is_full_sync:
+            logger.warning("[event_rejected] No valid delta/node items found in event '%s'", message.type)
             if message.request_id:
                 await send(build_error(request_id=message.request_id, code="EMPTY_PAYLOAD", message="No deltas to process"))
             return
@@ -96,32 +98,43 @@ class NodeSyncHandler:
                         await send(build_error(request_id=message.request_id, code="ENVIRONMENT_MISMATCH", message="Environment mismatch"))
                     return
 
-                # 4b. Processar cada item do delta
-                for item in items_to_process:
-                    try:
-                        data_dto = NodeSyncEventDataDTO.model_validate(item)
-                    except ValidationError as val_err:
-                        logger.error("[event_rejected] Invalid delta item in '%s': %s", message.type, val_err)
-                        continue
+                # 4b. Tratar resposta de Snapshot Completo (Full Sync + Prune)
+                if is_full_sync:
+                    dto_list = []
+                    for item in items_to_process:
+                        try:
+                            dto_list.append(NodeSyncEventDataDTO.model_validate(item))
+                        except ValidationError as val_err:
+                            logger.error("[event_rejected] Invalid node item in full sync snapshot: %s", val_err)
+                            continue
 
-                    action = (data_dto.action or "").upper()
-                    if action in ("NODE_REMOVED", "NODE_DELETED") or message.type == "node.removed":
-                        removed = sync_service.remove_node_state(data_dto)
-                        logger.info("[node_removed] Node removal processed (node_id=%s, removed=%s)", data_dto.node_id, removed)
-                    else:
-                        updated_node = sync_service.upsert_node_state(data_dto)
-                        if updated_node:
-                            node_identifier = getattr(updated_node, "headscale_node_id", None) or getattr(updated_node, "machine_id", None) or getattr(updated_node, "cloud_connection_id", None)
-                            node_kind = getattr(updated_node, "node_type", "client")
-                            logger.info(
-                                "[sync_delta_applied] Node '%s' state updated successfully (node_id=%s, type=%s, online=%s)",
-                                message.type,
-                                node_identifier,
-                                node_kind,
-                                updated_node.online,
-                            )
+                    res = sync_service.reconcile_full_snapshot(dto_list)
+                    logger.info("[sync_full_applied] Full snapshot reconciled: processed=%d, pruned=%d", res["processed"], res["pruned"])
+                else:
+                    # Processar eventos incrementais de deltas
+                    for item in items_to_process:
+                        try:
+                            data_dto = NodeSyncEventDataDTO.model_validate(item)
+                        except ValidationError as val_err:
+                            logger.error("[event_rejected] Invalid delta item in '%s': %s", message.type, val_err)
+                            continue
 
-
+                        action = (data_dto.action or "").upper()
+                        if action in ("NODE_REMOVED", "NODE_DELETED") or message.type == "node.removed":
+                            removed = sync_service.remove_node_state(data_dto)
+                            logger.info("[node_removed] Node removal processed (node_id=%s, removed=%s)", data_dto.node_id, removed)
+                        else:
+                            updated_node = sync_service.upsert_node_state(data_dto)
+                            if updated_node:
+                                node_identifier = getattr(updated_node, "headscale_node_id", None) or getattr(updated_node, "machine_id", None) or getattr(updated_node, "cloud_connection_id", None)
+                                node_kind = getattr(updated_node, "node_type", "client")
+                                logger.info(
+                                    "[sync_delta_applied] Node '%s' state updated successfully (node_id=%s, type=%s, online=%s)",
+                                    message.type,
+                                    node_identifier,
+                                    node_kind,
+                                    updated_node.online,
+                                )
 
             # 5. Resposta de ACK para a Cloud (se request_id estiver presente)
             if message.request_id:
