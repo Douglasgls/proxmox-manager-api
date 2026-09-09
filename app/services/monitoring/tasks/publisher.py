@@ -157,4 +157,8 @@ class MonitoringPublisher:
             }
             await event_bus.publish(f"containers.{container_id}.metrics", payload)
         except Exception as e:
-            logger.error(f"Error publishing container {container_id} metrics: {e}", exc_info=True)
+            error_str = str(e)
+            if "Configuration file" in error_str and "does not exist" in error_str:
+                logger.warning(f"Skipping metrics for container {container_id}: container does not exist or was deleted.")
+            else:
+                logger.error(f"Error publishing container {container_id} metrics: {e}", exc_info=True)
