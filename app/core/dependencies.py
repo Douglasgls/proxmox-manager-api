@@ -108,9 +108,34 @@ def get_db():
         db.close()
 
 
-def get_proxmox_client():
+from app.repositories.agent_config_repository import AgentConfigRepository
+from app.services.agent_config_service import AgentConfigService
+from app.core.exceptions import AuthenticationError # Or create a specific exception
 
-    return ProxmoxClient()
+
+def get_agent_config_service(db=Depends(get_db)) -> AgentConfigService:
+    return AgentConfigService(AgentConfigRepository(db))
+
+
+from fastapi import HTTPException, status
+
+def get_proxmox_client(agent_config_service: AgentConfigService = Depends(get_agent_config_service)):
+    credentials = agent_config_service.get_credentials()
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent Proxmox configuration is missing."
+        )
+        
+    return ProxmoxClient(
+        host=credentials["host"],
+        user=credentials["user"],
+        token_name=credentials["token_name"],
+        token_value=credentials["token_value"],
+        node=credentials["node"],
+        default_storage=credentials["default_storage"],
+        default_template=credentials["default_template"],
+    )
 
 
 @lru_cache
@@ -213,11 +238,12 @@ def get_container_service(
     db=Depends(get_db),
     provision_engine=Depends(get_provision_engine),
     container_component_service=Depends(get_container_component_service),
+    proxmox_client=Depends(get_proxmox_client),
 ):
 
     return ContainerService(
         repository=ContainerRepository(db),
-        proxmox_client=ProxmoxClient(),
+        proxmox_client=proxmox_client,
         audit_log_service=AuditLogService(
             AuditLogRepository(db)
         ),
@@ -244,10 +270,10 @@ def get_container_creation_workflow(
     )
 
 
-def get_template_service(db=Depends(get_db)):
+def get_template_service(db=Depends(get_db), proxmox_client=Depends(get_proxmox_client)):
 
     return TemplateService(
-        ProxmoxClient(),
+        proxmox_client,
         JobService(
             JobRepository(db)
         )
@@ -333,13 +359,14 @@ def get_container_component_install_workflow(
     component_service=Depends(get_component_service),
     container_component_service=Depends(get_container_component_service),
     job_service=Depends(get_job_service),
+    proxmox_client=Depends(get_proxmox_client),
 ) -> ContainerComponentInstallWorkflow:
     return ContainerComponentInstallWorkflow(
         container_repository=ContainerRepository(db),
         component_service=component_service,
         container_component_service=container_component_service,
         job_service=job_service,
-        proxmox_client=ProxmoxClient(),
+        proxmox_client=proxmox_client,
     )
 
 

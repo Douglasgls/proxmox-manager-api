@@ -42,19 +42,24 @@ class ProxmoxClient:
 
     def __init__(
         self,
+        host: str | None = None,
+        user: str | None = None,
+        token_name: str | None = None,
+        token_value: str | None = None,
+        node: str | None = None,
+        default_storage: str | None = None,
+        default_template: str | None = None,
         shell_executor: ShellExecutor | None = None,
         network_formatter: ProxmoxNetworkConfigurationFormatter | None = None,
     ):
-        load_dotenv()
-
-        self.host = os.getenv("PROXMOX_HOST")
-        self.user = os.getenv("PROXMOX_USER")
-        self.token_name = os.getenv("PROXMOX_TOKEN_NAME")
-        self.token_value = os.getenv("PROXMOX_TOKEN_VALUE")
-        self.node = os.getenv("PROXMOX_NODE")
+        self.host = host
+        self.user = user
+        self.token_name = token_name
+        self.token_value = token_value
+        self.node = node
         self.verify_ssl = False
-        self.default_storage = os.getenv("PROXMOX_DEFAULT_STORAGE")
-        self.default_template = os.getenv("PROXMOX_DEFAULT_TEMPLATE")
+        self.default_storage = default_storage
+        self.default_template = default_template
         self.shell_executor = shell_executor or ShellExecutor()
         self.network_formatter = (
             network_formatter
