@@ -21,6 +21,7 @@ from app.api.websocket import router as websocket
 from app.api.access_tokens import router as access_tokens
 from app.api.components import router as components
 from app.api.cloud import router as cloud_router
+from app.api.agent import router as agent_router
 from app.console.websocket_console import router as console_router
 from app.console.console_manager import console_manager
 from app.core.exceptions import AuthenticationError, DomainValidationError
@@ -52,30 +53,52 @@ async def lifespan(app: FastAPI):
     except Exception as seed_exc:
         logger.error("Erro ao sincronizar catálogo de componentes padrão: %s", seed_exc, exc_info=True)
 
-    # 1. Reconciliação atômica de inicialização com Proxmox VE antes de notificar o Cloud
+    # 1. Boot do Agent Config
+    try:
+        from app.repositories.agent_config_repository import AgentConfigRepository
+        from app.services.agent_config_service import AgentConfigService
+        with SessionLocal() as db:
+            agent_config_service = AgentConfigService(AgentConfigRepository(db))
+            agent_config_service.bootstrap_from_env()
+            config = agent_config_service.get_config()
+            app.state.proxmox_configured = config.configured
+            logger.info("Agent configurado com Proxmox: %s", app.state.proxmox_configured)
+    except Exception as exc:
+        logger.error("Erro ao realizar bootstrap da configuração do Agent: %s", exc, exc_info=True)
+        app.state.proxmox_configured = False
+
+    # 2. Reconciliação atômica e métricas (condicionais ao Proxmox)
     reconciliation_success = False
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
-        try:
-            logger.info("Iniciando reconciliação inicial dos containers com Proxmox VE (tentativa %d/%d)...", attempt, max_retries)
-            with SessionLocal() as db:
-                service = ContainerService(
-                    repository=ContainerRepository(db),
-                    proxmox_client=ProxmoxClient(),
-                )
-                await asyncio.to_thread(service.sync_all)
-            reconciliation_success = True
-            logger.info("Reconciliação inicial com Proxmox VE concluída com sucesso.")
-            break
-        except Exception as exc:
-            logger.error("Erro na tentativa %d de reconciliação com Proxmox VE: %s", attempt, exc, exc_info=True)
-            if attempt < max_retries:
-                await asyncio.sleep(2)
+    task = None
+    if app.state.proxmox_configured:
+        max_retries = 3
+        from app.core.dependencies import get_proxmox_client
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info("Iniciando reconciliação inicial dos containers com Proxmox VE (tentativa %d/%d)...", attempt, max_retries)
+                with SessionLocal() as db:
+                    agent_config_service = AgentConfigService(AgentConfigRepository(db))
+                    proxmox_client = get_proxmox_client(agent_config_service)
+                    service = ContainerService(
+                        repository=ContainerRepository(db),
+                        proxmox_client=proxmox_client,
+                    )
+                    await asyncio.to_thread(service.sync_all)
+                reconciliation_success = True
+                logger.info("Reconciliação inicial com Proxmox VE concluída com sucesso.")
+                break
+            except Exception as exc:
+                logger.error("Erro na tentativa %d de reconciliação com Proxmox VE: %s", attempt, exc, exc_info=True)
+                if attempt < max_retries:
+                    await asyncio.sleep(2)
+        
+        task = asyncio.create_task(metrics_collector.start())
+    else:
+        logger.warning("Proxmox não configurado. Pulando reconciliação e métricas de host/container.")
 
     app.state.is_reconciled = reconciliation_success
 
-    # 2. Iniciar métricas e gerenciador do Cloud após término garantido da reconciliação
-    task = asyncio.create_task(metrics_collector.start())
+    # 3. Iniciar gerenciador do Cloud
     logger.info("Iniciando conexão e sincronização com o Cloud Control Plane...")
     await cloud_manager.start()
     
@@ -86,11 +109,12 @@ async def lifespan(app: FastAPI):
     console_manager.close_all_sessions()
     await cloud_manager.stop()
     await metrics_collector.stop()
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(lifespan=lifespan)
@@ -194,4 +218,8 @@ app.include_router(
 app.include_router(
     tags=["cloud"],
     router=cloud_router
+)
+
+app.include_router(
+    agent_router
 )

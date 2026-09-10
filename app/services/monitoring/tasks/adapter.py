@@ -20,7 +20,13 @@ class MetricsCollector:
     async def start(self):
         logger.info("Initializing and starting the new MonitoringScheduler via MetricsCollector adapter...")
         try:
-            proxmox_client = get_proxmox_client()
+            from app.database.session import SessionLocal
+            from app.repositories.agent_config_repository import AgentConfigRepository
+            from app.services.agent_config_service import AgentConfigService
+            
+            with SessionLocal() as db:
+                agent_config_service = AgentConfigService(AgentConfigRepository(db))
+                proxmox_client = get_proxmox_client(agent_config_service)
             host_service = HostMonitoringService(
                 inventory_collector=HostInventoryCollector(proxmox_client),
                 metrics_collector=HostMetricsCollector(proxmox_client),
