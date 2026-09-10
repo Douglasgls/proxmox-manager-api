@@ -172,7 +172,7 @@ class EnvironmentStateSyncService:
 
 
     def _find_tailscale_node(self, dto: NodeSyncEventDataDTO) -> TailscaleNode | None:
-        """Busca nó Tailscale por headscale_node_id -> node_id -> machine_id -> container_id."""
+        """Busca nó Tailscale por headscale_node_id -> machine_id -> container_id -> tailscale_ip."""
         query = self.db.query(TailscaleNode)
 
         target_hs_id = str(dto.headscale_node_id or dto.node_id or "")
@@ -201,10 +201,15 @@ class EnvironmentStateSyncService:
             if found:
                 return found
 
+        if dto.tailscale_ip:
+            found = query.filter(TailscaleNode.tailscale_ip == dto.tailscale_ip).first()
+            if found:
+                return found
+
         return None
 
     def _find_client_connection(self, dto: NodeSyncEventDataDTO) -> ClientConnection | None:
-        """Busca conexão de cliente VPN por headscale_node_id -> cloud_connection_id."""
+        """Busca conexão de cliente VPN por headscale_node_id -> cloud_connection_id -> tailscale_ip -> hostname."""
         query = self.db.query(ClientConnection)
 
         target_hs_id = str(dto.headscale_node_id or dto.node_id or "")
@@ -215,6 +220,16 @@ class EnvironmentStateSyncService:
 
         if dto.node_id:
             found = query.filter(ClientConnection.cloud_connection_id == dto.node_id).first()
+            if found:
+                return found
+
+        if dto.tailscale_ip:
+            found = query.filter(ClientConnection.tailscale_ip == dto.tailscale_ip).first()
+            if found:
+                return found
+
+        if dto.hostname:
+            found = query.filter(ClientConnection.hostname == dto.hostname).first()
             if found:
                 return found
 
@@ -253,14 +268,14 @@ class EnvironmentStateSyncService:
         1. Aplica upsert/patch em cada nó recebido.
         2. Realiza o expurgo (pruning) dos registros locais que não existem mais no snapshot da Cloud.
 
-        Usa headscale_node_id como chave primária de validação (fonte da verdade: Headscale).
+        Usa headscale_node_id como chave primária de validação e tailscale_ip como fallback.
         """
         print(f"\n{'='*60}")
         print(f"[RECONCILIAÇÃO] Iniciando para {len(dto_list)} nós recebidos da Cloud")
         print(f"{'='*60}")
         logger.info("Starting full snapshot reconciliation for %d nodes...", len(dto_list))
 
-        # Sets de validação: headscale_node_id é a chave primária, IP é fallback
+        # Sets de validação: headscale_node_id e tailscale_ip
         valid_hs_ids: set[str] = set()
         valid_ips: set[str] = set()
 
@@ -285,12 +300,8 @@ class EnvironmentStateSyncService:
             c_hs_id = str(client.headscale_node_id or "")
             c_ip = str(client.tailscale_ip or "")
 
-            # Critério: headscale_node_id é a chave primária.
-            # IP é fallback apenas se o registro não tem headscale_node_id.
-            if c_hs_id:
-                is_valid = c_hs_id in valid_hs_ids
-            else:
-                is_valid = c_ip and c_ip in valid_ips
+            # Critério flexível: Válido por ID OU por IP
+            is_valid = (bool(c_hs_id) and c_hs_id in valid_hs_ids) or (bool(c_ip) and c_ip in valid_ips)
 
             print(f"    - ClientConnection: hostname={client.hostname}, hs_id={c_hs_id}, ip={c_ip} → {'VÁLIDO ✅' if is_valid else 'OBSOLETO ❌'}")
 
@@ -306,12 +317,19 @@ class EnvironmentStateSyncService:
             n_hs_id = str(node.headscale_node_id or "")
             n_ip = str(node.tailscale_ip or "")
 
-            if n_hs_id:
-                is_valid = n_hs_id in valid_hs_ids
-            else:
-                is_valid = n_ip and n_ip in valid_ips
+            # Critério flexível: Válido por ID OU por IP
+            is_valid = (bool(n_hs_id) and n_hs_id in valid_hs_ids) or (bool(n_ip) and n_ip in valid_ips)
 
-            print(f"    - TailscaleNode: hs_id={n_hs_id}, ip={n_ip}, container_id={node.container_id} → {'VÁLIDO ✅' if is_valid else 'OBSOLETO ❌'}")
+            if is_valid and n_ip and n_ip in valid_ips:
+                # Auto-correção de ID se o nó casou por IP mas tinha headscale_node_id desatualizado
+                matching_dto = next((d for d in dto_list if d.tailscale_ip == n_ip), None)
+                if matching_dto:
+                    new_hs_id = str(matching_dto.headscale_node_id or matching_dto.node_id or "")
+                    if new_hs_id and node.headscale_node_id != new_hs_id:
+                        logger.info("Auto-correcting TailscaleNode headscale_node_id from %s to %s for IP %s", node.headscale_node_id, new_hs_id, n_ip)
+                        node.headscale_node_id = new_hs_id
+
+            print(f"    - TailscaleNode: hs_id={node.headscale_node_id}, ip={n_ip}, container_id={node.container_id} → {'VÁLIDO ✅' if is_valid else 'OBSOLETO ❌'}")
 
             if not is_valid:
                 if not node.container_id:
@@ -338,7 +356,7 @@ class EnvironmentStateSyncService:
 
     @staticmethod
     def _update_model_status_json(model_inst, dto: NodeSyncEventDataDTO) -> None:
-        """Mantém e atualiza o dicionário status_json do modelo no banco de dados."""
+        """Mantém e atualiza o dicionário status_json e os atributos do modelo no banco de dados."""
         status_dict = dict(model_inst.status_json) if (getattr(model_inst, "status_json", None) and isinstance(model_inst.status_json, dict)) else {"Self": {}}
         self_info = dict(status_dict.get("Self", {}))
 
@@ -347,6 +365,10 @@ class EnvironmentStateSyncService:
             self_info["Online"] = is_online
             if hasattr(model_inst, "service_running"):
                 model_inst.service_running = is_online
+            if hasattr(model_inst, "status"):
+                model_inst.status = "ACTIVE" if is_online else "DISCONNECTED"
+            if isinstance(model_inst, ClientConnection):
+                model_inst.online = is_online
 
         if dto.hostname is not None:
             self_info["HostName"] = dto.hostname
@@ -384,8 +406,9 @@ class EnvironmentStateSyncService:
     @classmethod
     def _patch_node(cls, node: TailscaleNode, dto: NodeSyncEventDataDTO) -> None:
         """Atualiza atomicamente apenas os campos fornecidos no DTO."""
-        if dto.node_id is not None:
-            node.headscale_node_id = dto.node_id
+        target_hs_id = str(dto.headscale_node_id or dto.node_id or "")
+        if target_hs_id:
+            node.headscale_node_id = target_hs_id
 
         if dto.machine_id is not None:
             node.machine_id = dto.machine_id
@@ -398,3 +421,4 @@ class EnvironmentStateSyncService:
 
         cls._update_model_status_json(node, dto)
         node.last_sync = datetime.now(timezone.utc)
+
