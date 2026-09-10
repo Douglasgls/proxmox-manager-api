@@ -308,8 +308,55 @@ class NodeStateSyncTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(found.online)
         self.assertIsNone(found.container_id)
 
+    def test_reconciliation_divergent_headscale_id_ip_matching(self):
+        """Teste: Snapshot da Cloud envia hs_id numérico ('51') enquanto BD local possui UUID antigo ('6f3b...').
+        O sistema deve casar pelo IP '100.64.0.26', auto-corrigir o headscale_node_id para '51' e manter o status online=True.
+        """
+        service = EnvironmentStateSyncService(self.db)
+
+        # 1. Criar nó local com headscale_node_id UUID antigo e IP 100.64.0.26
+        old_node = TailscaleNode(
+            container_id=self.container.id,
+            proxmox_container_id=101,
+            node_type="container",
+            headscale_node_id="6f3b5476-b9cc-4287-9a16-3bc75fcbe31d",
+            machine_id="mid-uuid-old",
+            tailscale_ip="100.64.0.26",
+            installed=True,
+            service_running=True,
+            status_json={"Self": {"Online": True, "HostName": "teste"}},
+            last_sync=datetime.now(timezone.utc),
+        )
+        self.db.add(old_node)
+        self.db.commit()
+
+        # 2. Receber snapshot da Cloud com hs_id='51', ip='100.64.0.26', online=True
+        cloud_snapshot = [
+            NodeSyncEventDataDTO(
+                headscale_node_id="51",
+                hostname="teste",
+                tailscale_ip="100.64.0.26",
+                online=True,
+            ),
+        ]
+
+        # 3. Executar a reconciliação do snapshot
+        result = service.reconcile_full_snapshot(cloud_snapshot)
+
+        # 4. Verificar resultados
+        self.assertEqual(result["processed"], 1)
+        self.assertEqual(result["pruned"], 0)
+
+        # Buscar o nó no BD
+        updated_node = self.db.query(TailscaleNode).filter(TailscaleNode.tailscale_ip == "100.64.0.26").first()
+        self.assertIsNotNone(updated_node)
+        self.assertEqual(updated_node.headscale_node_id, "51")  # Auto-corrigido para '51'!
+        self.assertTrue(updated_node.online)  # Permanece online=True!
+        self.assertTrue(updated_node.service_running)
+
 
 
 if __name__ == "__main__":
     unittest.main()
+
 
