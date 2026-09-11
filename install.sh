@@ -74,7 +74,8 @@ get_server_ip() {
 
 install_database() {
     log "Instalando PostgreSQL e dependências básicas..."
-    apt-get update
+    # '|| true' previne que o script aborte caso repositórios do Proxmox Enterprise estejam sem licença e deem erro de GPG/Update
+    apt-get update || true
     apt-get install -y postgresql postgresql-client openssl curl git unzip python3
     log "PostgreSQL e dependências instaladas."
 }
@@ -96,7 +97,15 @@ create_database_user() {
     if runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
         log "Usuário '$DB_USER' já existe."
         if [ ! -f "$DB_CONFIG_FILE" ]; then
-            error "Usuário '$DB_USER' já existe, mas $DB_CONFIG_FILE não existe."
+            log "Aviso: Usuário existe, mas o arquivo de configuração não foi encontrado. Gerando nova senha..."
+            DB_PASS=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 24)
+            runuser -u postgres -- psql -c "ALTER USER $DB_USER WITH PASSWORD '$DB_PASS';"
+            
+            cat > "$DB_CONFIG_FILE" <<EOF
+DATABASE_URL=postgresql+psycopg://$DB_USER:$DB_PASS@127.0.0.1:5432/$DB_NAME
+EOF
+            chmod 600 "$DB_CONFIG_FILE"
+            log "Senha resetada e arquivo de configuração recriado."
         fi
         return
     fi
@@ -219,30 +228,46 @@ EOF
 
 install_uv() {
     log "Verificando uv..."
+    
+    # O systemd espera o uv sempre em /usr/local/bin/uv
+    if [ -x "/usr/local/bin/uv" ]; then
+        log "uv já está instalado no diretório global esperado."
+        return
+    fi
+
     if command -v uv >/dev/null 2>&1; then
-        log "uv já está instalado."
+        UV_PATH=$(command -v uv)
+        log "uv encontrado em $UV_PATH. Copiando para /usr/local/bin/uv..."
+        install -m 0755 "$UV_PATH" /usr/local/bin/uv
         return
     fi
 
     log "Instalando uv..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
+    
     if [ -x /root/.local/bin/uv ]; then
         install -m 0755 /root/.local/bin/uv /usr/local/bin/uv
     fi
 
-    if ! command -v uv >/dev/null 2>&1; then
-        error "Não foi possível instalar o uv."
+    if [ ! -x /usr/local/bin/uv ]; then
+        error "Não foi possível colocar o uv em /usr/local/bin/uv."
     fi
+    
     log "uv instalado com sucesso."
 }
 
 clone_backend() {
     log "Preparando backend..."
     if [ -d "$BACKEND_DIR/.git" ]; then
-        log "Backend já existe. Atualizando..."
+        log "Backend já existe. Forçando atualização para garantir estado limpo..."
         cd "$BACKEND_DIR"
-        git pull --ff-only
+        git fetch --all
+        git reset --hard origin/main
     else
+        if [ -d "$BACKEND_DIR" ]; then
+            log "Diretório do backend existe mas não é um repositório git. Recriando..."
+            rm -rf "$BACKEND_DIR"
+        fi
         git clone "$BACKEND_REPO" "$BACKEND_DIR"
     fi
     log "Backend disponível em $BACKEND_DIR."
@@ -251,8 +276,8 @@ clone_backend() {
 install_backend_dependencies() {
     log "Instalando dependências do backend..."
     cd "$BACKEND_DIR"
-    uv python install 3.13
-    uv sync --python 3.13
+    /usr/local/bin/uv python install 3.13
+    /usr/local/bin/uv sync --python 3.13
     log "Dependências instaladas."
 }
 
@@ -262,7 +287,7 @@ run_database_migrations() {
     set -a
     source "$BACKEND_CONFIG_FILE"
     set +a
-    uv run alembic upgrade head
+    /usr/local/bin/uv run alembic upgrade head
     log "Migrations executadas com sucesso."
 }
 
@@ -275,11 +300,22 @@ install_frontend() {
     mkdir -p "$FRONTEND_DIR"
     
     log "Fazendo download do artefato mais recente do frontend..."
-    curl -sL "$FRONTEND_RELEASE_URL" -o /tmp/dist.zip
+    if ! curl -fsSL "$FRONTEND_RELEASE_URL" -o /tmp/dist.zip; then
+        error "Falha ao baixar o arquivo frontend. A URL pode estar incorreta ou a release não possui o arquivo."
+    fi
     
-    # Extrair os arquivos
-    unzip -o /tmp/dist.zip -d "$FRONTEND_DIR/"
-    rm /tmp/dist.zip
+    # Extrair os arquivos para uma pasta temporária para resolver o problema da pasta 'dist' interna
+    rm -rf /tmp/frontend_extract
+    unzip -o /tmp/dist.zip -d /tmp/frontend_extract/ > /dev/null
+    
+    # O ZIP do vite joga os arquivos dentro de uma subpasta 'dist'. Precisamos mover apenas o conteúdo.
+    if [ -d "/tmp/frontend_extract/dist" ]; then
+        cp -r /tmp/frontend_extract/dist/* "$FRONTEND_DIR/"
+    else
+        cp -r /tmp/frontend_extract/* "$FRONTEND_DIR/"
+    fi
+    
+    rm -rf /tmp/frontend_extract /tmp/dist.zip
 }
 
 # ============================================================
