@@ -335,20 +335,7 @@ check_backend_service() {
     log "Health check OK."
 }
 
-install_agent() {
-    log "========================================="
-    log "Instalando Proxmox Manager Agent"
-    log "========================================="
 
-    install_uv
-    clone_backend
-    generate_backend_config
-    install_backend_dependencies
-    run_database_migrations
-    create_backend_service
-    start_backend_service
-    check_backend_service
-}
 
 main() {
     check_root
@@ -359,11 +346,20 @@ main() {
     # 1. Banco
     install_database_stack
 
-    # 2. Frontend Estático
+    # 2. Prepara o Backend (Git Clone) primeiro para que a pasta fique vazia para o Git
+    install_uv
+    clone_backend
+
+    # 3. Frontend Estático (Agora a pasta do backend já existe e podemos extrair o dist lá dentro)
     install_frontend
 
-    # 3. Agent (Backend)
-    install_agent
+    # 4. Configura, instala dependências e sobe o Agent (Backend)
+    generate_backend_config
+    install_backend_dependencies
+    run_database_migrations
+    create_backend_service
+    start_backend_service
+    check_backend_service
 
     log "========================================="
     log "INSTALAÇÃO CONCLUÍDA"
