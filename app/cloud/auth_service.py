@@ -42,7 +42,7 @@ class CloudAuthService:
 
         jwt_token = data["access_token"]
         expires_in = data["expires_in"]
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
 
         env_id = data.get("environment_id") or data.get("cloud_environment_id")
         if not env_id:
