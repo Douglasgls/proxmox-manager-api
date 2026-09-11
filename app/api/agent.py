@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from app.schemas.agent_config import AgentConfigUpdate, AgentConfigResponse, AgentTestConnection
 from app.services.agent_config_service import AgentConfigService
 from app.core.dependencies import get_agent_config_service
@@ -75,17 +75,30 @@ def test_connection(data: AgentTestConnection):
         )
 
 
+from app.security.dependencies import get_current_user
+from app.models.user import User
+
 @router.post("/restart")
-def restart_agent():
+def restart_agent(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user)
+):
     """
     Solicita o reinício do Agent.
-    A implementação exata depende do gerenciador de processos (systemd/Docker).
-    No momento, informa que a ação é manual.
+    O processo recebe SIGTERM e o systemd realiza o restart.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Reinício automático ainda não está suportado. Por favor, reinicie o serviço manualmente no host."
-    )
+
+    def do_restart():
+        import os
+        import signal
+        import time
+
+        time.sleep(1)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    background_tasks.add_task(do_restart)
+
+    return {"message": "Reiniciando o agente em instantes..."}
 
 @router.get("/status")
 def get_agent_status(
