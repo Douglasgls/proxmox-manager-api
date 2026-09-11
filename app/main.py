@@ -5,9 +5,10 @@
 
 from contextlib import asynccontextmanager
 import asyncio
-from fastapi import FastAPI
-from fastapi import Request
-from fastapi.responses import JSONResponse
+import os
+from fastapi import APIRouter, FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 import logging
 from app.api.users import router as users
@@ -153,55 +154,67 @@ def authentication_error_handler(
     )
 
 
-app.include_router(
+api_router = APIRouter(prefix="/api")
+
+api_router.include_router(
     tags=["users"],
     router=users
 )
 
-app.include_router(
+api_router.include_router(
     tags=["auth"],
     router=auth
 )
 
-app.include_router(
+api_router.include_router(
     tags=["containers"],
     router=containers
 )
 
-app.include_router(
+api_router.include_router(
     tags=["templates"],
     router=templates
 )
 
-app.include_router(
+api_router.include_router(
     tags=["jobs"],
     router=jobs
 )
 
-# app.include_router(
-#     actions
-# )
-
-# app.include_router(
-#     audit
-# )
-
-app.include_router(
+api_router.include_router(
     tags=["health"],
     router=health
 )
 
-app.include_router(
+api_router.include_router(
     tags=["monitoring"],
     router=monitoring
 )
 
-app.include_router(
+api_router.include_router(
     tags=["access_tokens"],
     prefix="/access-token",
     router=access_tokens
 )
 
+api_router.include_router(
+    tags=["components"],
+    router=components
+)
+
+api_router.include_router(
+    tags=["cloud"],
+    router=cloud_router
+)
+
+api_router.include_router(
+    agent_router
+)
+
+# Incluir o roteador API na aplicação principal
+app.include_router(api_router)
+
+# Roteadores de WebSocket permanecem sem o prefixo /api, pois o frontend os consome assim
 app.include_router(
     websocket
 )
@@ -210,16 +223,24 @@ app.include_router(
     console_router
 )
 
-app.include_router(
-    tags=["components"],
-    router=components
-)
+# ============================================================
+# Single Server Deployment - Serve Static Frontend
+# ============================================================
 
-app.include_router(
-    tags=["cloud"],
-    router=cloud_router
-)
+app.mount("/assets", StaticFiles(directory="static/assets", check_dir=False), name="assets")
 
-app.include_router(
-    agent_router
-)
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not Found")
+        
+    static_file_path = os.path.join("static", full_path)
+    if os.path.isfile(static_file_path):
+        return FileResponse(static_file_path)
+        
+    index_path = os.path.join("static", "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+        
+    raise HTTPException(status_code=404, detail="Not Found")
+
