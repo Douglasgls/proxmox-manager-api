@@ -206,14 +206,32 @@ PY
         error "Não foi possível gerar AGENT_ENCRYPTION_KEY."
     fi
 
+    CLOUD_ENCRYPTION_KEY=$(python3 - <<'PY'
+import base64
+import os
+print(base64.urlsafe_b64encode(os.urandom(32)).decode())
+PY
+)
+
+    if [ -z "$CLOUD_ENCRYPTION_KEY" ]; then
+        error "Não foi possível gerar CLOUD_ENCRYPTION_KEY."
+    fi
+
     JWT_SECRET_KEY=$(openssl rand -hex 64)
+
+    # Configuração explícita do Cloud Control Plane
+    CLOUD_URL="https://douglaspaz.site/api"
 
     cat > "$BACKEND_CONFIG_FILE" <<EOF
 # Banco de dados
 DATABASE_URL=$DATABASE_URL
 
-# Criptografia interna
+# Criptografia interna e Nuvem
 AGENT_ENCRYPTION_KEY=$AGENT_ENCRYPTION_KEY
+CLOUD_ENCRYPTION_KEY=$CLOUD_ENCRYPTION_KEY
+
+# Conexão com o Painel de Controle Cloud
+CLOUD_URL=$CLOUD_URL
 
 # JWT
 JWT_SECRET_KEY=$JWT_SECRET_KEY
