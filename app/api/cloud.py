@@ -292,3 +292,25 @@ async def sync_cloud_nodes():
         "message": "Node synchronization request sent to Cloud via WebSocket.",
     }
 
+
+@router.delete(
+    "/cloud/unlink",
+    summary="Desvincular o Agent da Cloud",
+    description="Desregistra o Agent da Cloud e limpa todos os vínculos no banco local.",
+)
+async def unlink_agent(force: bool = False):
+    from app.services.cloud_unlink_service import CloudUnlinkService
+    
+    result = await CloudUnlinkService.unlink(force=force)
+    
+    if result["status"] == "error":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["message"],
+        )
+        
+    # Se force=True mas não houve sucesso na nuvem, podemos retornar 207 Multi-Status
+    # Porém, no FastAPI o padrão é retornar 200 com a mensagem de aviso no body
+    return result
+
+

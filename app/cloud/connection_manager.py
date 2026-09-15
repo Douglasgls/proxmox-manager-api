@@ -132,9 +132,17 @@ class CloudConnectionManager:
             self._schedule_reconnect()
             return
 
+        if not self._running:
+            return
+
         try:
             ws_url = self._build_ws_url(cloud_url)
             await self._ws_client.connect(ws_url, settings.jwt)
+            
+            if not self._running:
+                await self._ws_client.close()
+                return
+                
             self._reconnect_attempt = 0
             self._listen_task = asyncio.create_task(self._listen_loop())
         except Exception as exc:
