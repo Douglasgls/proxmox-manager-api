@@ -5,7 +5,7 @@ set -e
 # Configuração da aplicação (Ambiente de Testes - Branches: teste)
 # ============================================================
 
-APP_NAME="agent-proxmox"
+APP_NAME="agent-proxmox-test"
 
 APP_DIR="/opt/$APP_NAME"
 CONFIG_DIR="/etc/$APP_NAME"
@@ -19,12 +19,12 @@ BACKEND_BRANCH="teste"
 FRONTEND_REPO="https://github.com/Douglasgls/proxmox-manager-app.git"
 FRONTEND_BRANCH="teste"
 
-BACKEND_SERVICE="agent-proxmox.service"
+BACKEND_SERVICE="agent-proxmox-test.service"
 
-BACKEND_PORT="8000"
+BACKEND_PORT="9000"
 
-DB_NAME="agent_proxmox"
-DB_USER="agent_proxmox"
+DB_NAME="agent_proxmox_test"
+DB_USER="agent_proxmox_test"
 
 DB_CONFIG_FILE="$CONFIG_DIR/database.env"
 BACKEND_CONFIG_FILE="$CONFIG_DIR/backend.env"
