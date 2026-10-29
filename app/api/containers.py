@@ -39,7 +39,7 @@ from app.security.dependencies import get_current_user
 from app.models.user import User
 
 from app.access.manager import AccessTokenManager
-from app.access.dto import AccessTokenCreateResponseDTO, AccessTokenMetadataDTO
+from app.access.dto import AccessTokenCreateResponseDTO, AccessTokenCreateRequestDTO, AccessTokenMetadataDTO
 
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -276,9 +276,20 @@ def tailscale_setup(
 )
 def create_access_token(
     id: str,
+    dto: AccessTokenCreateRequestDTO | None = None,
     manager: AccessTokenManager = Depends(get_access_token_manager)
 ):
-    return manager.create_token(id)
+    expires_in_days = dto.expires_in_days if dto else None
+    expires_in_hours = dto.expires_in_hours if dto else None
+    expires_in_minutes = dto.expires_in_minutes if dto else None
+    description = dto.description if dto else None
+    return manager.create_token(
+        container_id=id,
+        description=description,
+        expires_in_days=expires_in_days,
+        expires_in_hours=expires_in_hours,
+        expires_in_minutes=expires_in_minutes,
+    )
 
 
 @router.get(

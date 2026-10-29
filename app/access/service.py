@@ -17,17 +17,35 @@ class AccessTokenService:
         """Gera um hash SHA-256 do token."""
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-    def create_token_record(self, container_id: str, description: str | None = None) -> tuple[AccessToken, str]:
+    def create_token_record(
+        self,
+        container_id: str,
+        description: str | None = None,
+        expires_in_days: int | None = None,
+        expires_in_hours: int | None = None,
+        expires_in_minutes: int | None = None,
+    ) -> tuple[AccessToken, str]:
         """Cria e persiste um novo token de acesso, retornando o registro e o token em texto puro."""
         raw_token = self.generate_token()
         token_hash = self.hash_token(raw_token)
         
-        expires_at = datetime.utcnow() + timedelta(days=7)
+        if expires_in_minutes is not None and expires_in_minutes > 0:
+            delta = timedelta(minutes=expires_in_minutes)
+        elif expires_in_hours is not None and expires_in_hours > 0:
+            delta = timedelta(hours=expires_in_hours)
+        elif expires_in_days is not None and expires_in_days > 0:
+            delta = timedelta(days=expires_in_days)
+        else:
+            delta = timedelta(days=7)
+            
+        expires_at = datetime.utcnow() + delta
         
+        now = datetime.utcnow()
         token_record = AccessToken(
             container_id=container_id,
             token_hash=token_hash,
             description=description,
+            created_at=now,
             expires_at=expires_at,
             active=True
         )

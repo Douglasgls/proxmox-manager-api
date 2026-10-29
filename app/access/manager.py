@@ -6,8 +6,21 @@ class AccessTokenManager:
     def __init__(self, service: AccessTokenService):
         self.service = service
 
-    def create_token(self, container_id: str, description: str | None = None) -> AccessTokenCreateResponseDTO:
-        token_record, raw_token = self.service.create_token_record(container_id, description)
+    def create_token(
+        self,
+        container_id: str,
+        description: str | None = None,
+        expires_in_days: int | None = None,
+        expires_in_hours: int | None = None,
+        expires_in_minutes: int | None = None,
+    ) -> AccessTokenCreateResponseDTO:
+        token_record, raw_token = self.service.create_token_record(
+            container_id=container_id,
+            description=description,
+            expires_in_days=expires_in_days,
+            expires_in_hours=expires_in_hours,
+            expires_in_minutes=expires_in_minutes,
+        )
         
         try:
             from app.core.event_bus import internal_event_bus, EnvironmentChanged
