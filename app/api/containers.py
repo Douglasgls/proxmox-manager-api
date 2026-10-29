@@ -277,8 +277,17 @@ def tailscale_setup(
 def create_access_token(
     id: str,
     dto: AccessTokenCreateRequestDTO | None = None,
-    manager: AccessTokenManager = Depends(get_access_token_manager)
+    manager: AccessTokenManager = Depends(get_access_token_manager),
+    container_service: ContainerService = Depends(get_container_service),
 ):
+    try:
+        container_service.get(id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Container '{id}' não encontrado",
+        )
+
     expires_in_days = dto.expires_in_days if dto else None
     expires_in_hours = dto.expires_in_hours if dto else None
     expires_in_minutes = dto.expires_in_minutes if dto else None
@@ -298,8 +307,17 @@ def create_access_token(
 )
 def get_access_tokens(
     id: str,
-    manager: AccessTokenManager = Depends(get_access_token_manager)
+    manager: AccessTokenManager = Depends(get_access_token_manager),
+    container_service: ContainerService = Depends(get_container_service),
 ):
+    try:
+        container_service.get(id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Container '{id}' não encontrado",
+        )
+
     return manager.list_tokens_metadata(id)
 
 

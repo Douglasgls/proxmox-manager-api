@@ -15,7 +15,7 @@ class AccessTokenRepository:
     def get_by_container(self, container_id: str) -> list[AccessToken]:
         return self.session.query(AccessToken).filter(
             AccessToken.container_id == container_id
-        ).all()
+        ).order_by(AccessToken.created_at.desc()).all()
 
     def get_by_hash(self, token_hash: str) -> AccessToken | None:
         return self.session.query(AccessToken).filter(

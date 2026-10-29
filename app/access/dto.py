@@ -3,7 +3,7 @@ from datetime import datetime
 
 
 class AccessTokenCreateRequestDTO(BaseModel):
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=255)
     expires_in_days: int | None = Field(default=None, ge=1)
     expires_in_hours: int | None = Field(default=None, ge=1)
     expires_in_minutes: int | None = Field(default=None, ge=1)
