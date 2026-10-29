@@ -29,22 +29,22 @@ class AccessTokenService:
         raw_token = self.generate_token()
         token_hash = self.hash_token(raw_token)
         
-        if expires_in_minutes is not None and expires_in_minutes > 0:
-            delta = timedelta(minutes=expires_in_minutes)
-        elif expires_in_hours is not None and expires_in_hours > 0:
-            delta = timedelta(hours=expires_in_hours)
-        elif expires_in_days is not None and expires_in_days > 0:
-            delta = timedelta(days=expires_in_days)
+        minutes = expires_in_minutes if (expires_in_minutes is not None and expires_in_minutes > 0) else 0
+        hours = expires_in_hours if (expires_in_hours is not None and expires_in_hours > 0) else 0
+        days = expires_in_days if (expires_in_days is not None and expires_in_days > 0) else 0
+
+        if minutes > 0 or hours > 0 or days > 0:
+            delta = timedelta(days=days, hours=hours, minutes=minutes)
         else:
             delta = timedelta(days=7)
             
-        expires_at = datetime.utcnow() + delta
-        
         now = datetime.utcnow()
+        expires_at = now + delta
+        
         token_record = AccessToken(
             container_id=container_id,
             token_hash=token_hash,
-            description=description,
+            description=description.strip() if description and description.strip() else None,
             created_at=now,
             expires_at=expires_at,
             active=True

@@ -181,6 +181,7 @@ class PublishedAccessTokenSnapshotDTO(BaseModel):
     expires_at: Any
     active: bool
     revoked_at: Optional[Any] = None
+    description: Optional[str] = None
 
 
 class PublishedContainerSnapshotDTO(BaseModel):

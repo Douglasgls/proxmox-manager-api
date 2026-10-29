@@ -1,5 +1,14 @@
+from datetime import datetime, timezone
 from app.access.service import AccessTokenService
 from app.access.dto import AccessTokenCreateResponseDTO, AccessTokenMetadataDTO
+
+
+def _ensure_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 class AccessTokenManager:
@@ -33,8 +42,9 @@ class AccessTokenManager:
 
         return AccessTokenCreateResponseDTO(
             token=raw_token,
-            expires_at=token_record.expires_at,
-            created_at=token_record.created_at
+            expires_at=_ensure_utc(token_record.expires_at),
+            created_at=_ensure_utc(token_record.created_at),
+            description=token_record.description
         )
         
     def list_tokens_metadata(self, container_id: str) -> list[AccessTokenMetadataDTO]:
@@ -43,10 +53,11 @@ class AccessTokenManager:
         return [
             AccessTokenMetadataDTO(
                 id=t.id,
-                created_at=t.created_at,
-                expires_at=t.expires_at,
+                created_at=_ensure_utc(t.created_at),
+                expires_at=_ensure_utc(t.expires_at),
                 active=t.active,
-                last_used_at=t.last_used_at
+                last_used_at=_ensure_utc(t.last_used_at),
+                description=t.description
             ) for t in tokens
         ]
         

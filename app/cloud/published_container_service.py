@@ -114,6 +114,7 @@ class PublishedContainerService:
                             expires_at=token.expires_at,
                             active=token.active,
                             revoked_at=token.revoked_at,
+                            description=token.description,
                         )
                     )
 
