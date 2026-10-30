@@ -30,8 +30,13 @@ from app.services.monitoring.tasks.adapter import metrics_collector
 from app.services.job_events import job_event_manager
 from app.cloud.manager import cloud_manager
 from app.database.session import SessionLocal
-from app.repositories.container_repository import ContainerRepository
-from app.integrations.proxmox import ProxmoxClient
+from app.integrations.proxmox import (
+    ContainerNotFoundError,
+    ProxmoxAPIError,
+    ProxmoxClient,
+    ProxmoxConnectionError,
+    ProxmoxPermissionError,
+)
 from app.services.container_service import ContainerService
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -151,6 +156,77 @@ def authentication_error_handler(
         status_code=401,
         content={"detail": str(exc)},
         headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+@app.exception_handler(ProxmoxPermissionError)
+def proxmox_permission_error_handler(
+    _request: Request,
+    exc: ProxmoxPermissionError,
+):
+    detail_msg = "Permissão insuficiente no Proxmox VE."
+    if exc.required_permission and exc.path:
+        detail_msg = f"Permissão insuficiente no Proxmox VE: privilégio '{exc.required_permission}' necessário no caminho '{exc.path}'."
+    elif exc.required_permission:
+        detail_msg = f"Permissão insuficiente no Proxmox VE: privilégio '{exc.required_permission}' necessário."
+
+    logger.warning("Proxmox permission denied: %s (path=%s, perm=%s)", exc.message, exc.path, exc.required_permission)
+
+    return JSONResponse(
+        status_code=403,
+        content={
+            "detail": detail_msg,
+            "error_code": "PROXMOX_PERMISSION_DENIED",
+            "required_permission": exc.required_permission,
+            "path": exc.path,
+            "raw_message": exc.message,
+        },
+    )
+
+
+@app.exception_handler(ContainerNotFoundError)
+def container_not_found_error_handler(
+    _request: Request,
+    exc: ContainerNotFoundError,
+):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "detail": str(exc),
+            "error_code": "CONTAINER_NOT_FOUND",
+        },
+    )
+
+
+@app.exception_handler(ProxmoxConnectionError)
+def proxmox_connection_error_handler(
+    _request: Request,
+    exc: ProxmoxConnectionError,
+):
+    logger.error("Proxmox connection error: %s", exc.message)
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": exc.message or "Falha na comunicação com o Proxmox VE.",
+            "error_code": "PROXMOX_CONNECTION_ERROR",
+        },
+    )
+
+
+@app.exception_handler(ProxmoxAPIError)
+def proxmox_api_error_handler(
+    _request: Request,
+    exc: ProxmoxAPIError,
+):
+    status_code = exc.status_code if exc.status_code and 400 <= exc.status_code < 600 else 502
+    logger.error("Proxmox API error [%s]: %s", status_code, exc.message)
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "detail": f"Erro na API do Proxmox VE: {exc.message}",
+            "error_code": "PROXMOX_API_ERROR",
+            "raw_message": exc.message,
+        },
     )
 
 

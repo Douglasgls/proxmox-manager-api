@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from datetime import datetime
 import time
 from time import perf_counter
@@ -16,6 +17,7 @@ from app.integrations.proxmox.exceptions import (
     ContainerOperationError,
     ProxmoxAPIError,
     ProxmoxConnectionError,
+    ProxmoxPermissionError,
     ShellExecutionError,
 )
 from app.integrations.proxmox.models import (
@@ -1642,8 +1644,22 @@ class ProxmoxClient:
         self,
         exc: ResourceException,
     ) -> ProxmoxAPIError:
+        status_code = getattr(exc, "status_code", None)
+        msg = str(exc)
+
+        if status_code == 403 or "Permission check failed" in msg or "403 Forbidden" in msg:
+            match = re.search(r"Permission check failed \(([^,]+),\s*([^)]+)\)", msg)
+            path = match.group(1).strip() if match else None
+            perm = match.group(2).strip() if match else None
+            return ProxmoxPermissionError(
+                message=msg,
+                required_permission=perm,
+                path=path,
+            )
+
         return ProxmoxAPIError(
-            str(exc)
+            message=msg,
+            status_code=status_code,
         )
 
     def _is_not_found(

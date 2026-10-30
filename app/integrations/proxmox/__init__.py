@@ -3,6 +3,7 @@ from app.integrations.proxmox.exceptions import (
     ContainerOperationError,
     ProxmoxAPIError,
     ProxmoxConnectionError,
+    ProxmoxPermissionError,
     ShellExecutionError,
 )
 from app.integrations.proxmox.models import (
@@ -31,6 +32,7 @@ __all__ = [
     "ProxmoxAPIError",
     "ProxmoxClient",
     "ProxmoxConnectionError",
+    "ProxmoxPermissionError",
     "ShellExecutionError",
     "ShellExecutor",
     "ShellResult",
