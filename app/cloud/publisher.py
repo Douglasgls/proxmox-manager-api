@@ -47,8 +47,8 @@ class EnvironmentChangedPublisher:
 
     async def _send_after_delay(self) -> None:
         try:
-            logger.info("EnvironmentChanged received. Scheduling dispatch in 2 seconds (debounce)...")
-            await asyncio.sleep(5.0)
+            logger.info("EnvironmentChanged received. Scheduling dispatch in 1 second (debounce)...")
+            await asyncio.sleep(1.0)
 
             payload = {
                 "origin": "agent",
