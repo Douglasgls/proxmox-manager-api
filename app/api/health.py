@@ -8,6 +8,11 @@ from app.integrations.proxmox import ProxmoxClient
 router = APIRouter()
 
 
+@router.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
 @router.get(
     "/health/proxmox"
 )

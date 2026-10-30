@@ -30,6 +30,7 @@ from app.services.monitoring.tasks.adapter import metrics_collector
 from app.services.job_events import job_event_manager
 from app.cloud.manager import cloud_manager
 from app.database.session import SessionLocal
+from app.repositories.container_repository import ContainerRepository
 from app.integrations.proxmox import (
     ContainerNotFoundError,
     ProxmoxAPIError,
