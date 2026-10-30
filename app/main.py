@@ -312,6 +312,11 @@ app.include_router(
     console_router
 )
 
+@app.get("/health", tags=["health"])
+def root_health():
+    return {"status": "ok"}
+
+
 # ============================================================
 # Single Server Deployment - Serve Static Frontend
 # ============================================================
