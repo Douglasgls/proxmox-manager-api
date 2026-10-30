@@ -8,7 +8,7 @@ def _ensure_utc(dt: datetime | None) -> datetime | None:
         return None
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
-    return dt
+    return dt.astimezone(timezone.utc)
 
 
 class AccessTokenManager:

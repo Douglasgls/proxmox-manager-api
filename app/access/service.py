@@ -38,7 +38,7 @@ class AccessTokenService:
         else:
             delta = timedelta(days=7)
             
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         expires_at = now + delta
         
         token_record = AccessToken(
@@ -59,7 +59,7 @@ class AccessTokenService:
         if not token:
             return None
             
-        token.revoked_at = datetime.now(timezone.utc)
+        token.revoked_at = datetime.now(timezone.utc).replace(tzinfo=None)
         return self.repository.revoke(token)
         
     def list_by_container(self, container_id: str) -> list[AccessToken]:
