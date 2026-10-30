@@ -1,6 +1,6 @@
 import secrets
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.access.model import AccessToken
 from app.access.repository import AccessTokenRepository
 
@@ -38,7 +38,7 @@ class AccessTokenService:
         else:
             delta = timedelta(days=7)
             
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expires_at = now + delta
         
         token_record = AccessToken(
@@ -59,7 +59,7 @@ class AccessTokenService:
         if not token:
             return None
             
-        token.revoked_at = datetime.utcnow()
+        token.revoked_at = datetime.now(timezone.utc)
         return self.repository.revoke(token)
         
     def list_by_container(self, container_id: str) -> list[AccessToken]:

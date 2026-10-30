@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.cloud.dto import (
@@ -12,6 +13,14 @@ from app.models.container import Container
 from app.repositories.container_repository import ContainerRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 # Mapeamento de portas conhecidas por slug do componente
 KNOWN_COMPONENT_PORTS: dict[str, int] = {
@@ -110,10 +119,10 @@ class PublishedContainerService:
                         PublishedAccessTokenSnapshotDTO(
                             id=token.id,
                             token_hash=token.token_hash,
-                            created_at=token.created_at,
-                            expires_at=token.expires_at,
+                            created_at=_ensure_utc(token.created_at),
+                            expires_at=_ensure_utc(token.expires_at),
                             active=token.active,
-                            revoked_at=token.revoked_at,
+                            revoked_at=_ensure_utc(token.revoked_at),
                             description=token.description,
                         )
                     )
