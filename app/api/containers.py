@@ -244,6 +244,24 @@ def tailscale_setup(
     job_service = Depends(get_job_service),
     tailscale_manager_factory = Depends(get_tailscale_manager),
 ):
+    from app.database.session import SessionLocal
+    from app.cloud.repository import AgentSettingsRepository
+    from app.cloud.manager import cloud_manager
+
+    with SessionLocal() as db:
+        settings = AgentSettingsRepository(db).get()
+        if not settings or not settings.environment_token_encrypted:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A Cloud Control Plane não está vinculada. Vincule o Agent à Cloud para permitir acesso remoto.",
+            )
+
+    if not (cloud_manager.connection_manager and cloud_manager.connection_manager._ws_client and cloud_manager.connection_manager._ws_client.is_connected):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A Cloud Control Plane está desconectada. Restabeleça a conexão para permitir acesso remoto.",
+        )
+
     # Verify container exists
     container = container_service.get(id)
     
@@ -283,6 +301,24 @@ def create_access_token(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Container '{id}' não encontrado",
+        )
+
+    from app.database.session import SessionLocal
+    from app.cloud.repository import AgentSettingsRepository
+    from app.cloud.manager import cloud_manager
+
+    with SessionLocal() as db:
+        settings = AgentSettingsRepository(db).get()
+        if not settings or not settings.environment_token_encrypted:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A Cloud Control Plane não está vinculada. Vincule o Agent à Cloud para gerar tokens de acesso.",
+            )
+
+    if not (cloud_manager.connection_manager and cloud_manager.connection_manager._ws_client and cloud_manager.connection_manager._ws_client.is_connected):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A Cloud Control Plane está desconectada. Restabeleça a conexão para gerar tokens de acesso.",
         )
 
     expires_in_days = dto.expires_in_days if dto else None
