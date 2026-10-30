@@ -188,7 +188,8 @@ class Container(Base):
         now = datetime.now(timezone.utc)
         count = 0
         for t in self.access_tokens:
-            if getattr(t, 'status', None) == 'ACTIVE':
+            is_active = getattr(t, 'active', False) and getattr(t, 'revoked_at', None) is None
+            if is_active:
                 exp = getattr(t, 'expires_at', None)
                 if not exp:
                     count += 1
