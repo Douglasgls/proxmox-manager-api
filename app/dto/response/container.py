@@ -52,6 +52,9 @@ class ContainerResponseDTO(BaseModel):
     vlan: int | None = None
     mac_address: str | None = None
     image_name: str | None = None
+    tailscale_ip: str | None = None
+    tailscale_online: bool = False
+    active_tokens_count: int = 0
     components: list[ContainerComponentResponseDTO] = Field(
         default=[],
         validation_alias=AliasChoices("components", "container_components"),

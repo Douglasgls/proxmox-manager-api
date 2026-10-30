@@ -16,6 +16,25 @@ class ContainerRepository(
             Container
         )
 
+    def get(
+        self,
+        entity_id
+    ):
+        from sqlalchemy.orm import joinedload, selectinload
+        return (
+            self.db
+            .query(Container)
+            .options(
+                joinedload(Container.tailscale_node),
+                selectinload(Container.access_tokens),
+            )
+            .filter(
+                Container.id == entity_id
+            )
+            .first()
+        )
+
+
 
     def get_by_name(
         self,

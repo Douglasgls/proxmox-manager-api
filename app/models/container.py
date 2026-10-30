@@ -168,5 +168,33 @@ class Container(Base):
         passive_deletes=True,
     )
 
+    @property
+    def tailscale_ip(self) -> str | None:
+        if self.tailscale_node:
+            return self.tailscale_node.tailscale_ip
+        return None
 
+    @property
+    def tailscale_online(self) -> bool:
+        if self.tailscale_node:
+            return self.tailscale_node.online
+        return False
+
+    @property
+    def active_tokens_count(self) -> int:
+        if not self.access_tokens:
+            return 0
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        count = 0
+        for t in self.access_tokens:
+            if getattr(t, 'status', None) == 'ACTIVE':
+                exp = getattr(t, 'expires_at', None)
+                if not exp:
+                    count += 1
+                else:
+                    exp_utc = exp if exp.tzinfo is not None else exp.replace(tzinfo=timezone.utc)
+                    if exp_utc > now:
+                        count += 1
+        return count
 
