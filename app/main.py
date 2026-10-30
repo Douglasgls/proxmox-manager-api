@@ -139,7 +139,19 @@ def domain_validation_error_handler(
     _request: Request,
     exc: DomainValidationError,
 ):
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": str(exc)
+        },
+    )
 
+
+@app.exception_handler(ValueError)
+def value_error_handler(
+    _request: Request,
+    exc: ValueError,
+):
     return JSONResponse(
         status_code=400,
         content={

@@ -1,6 +1,5 @@
-from fastapi import APIRouter
-from fastapi import Depends
-
+from fastapi import APIRouter, Depends, HTTPException
+from app.core.exceptions import DomainValidationError
 from app.dto.request.create_user import (
     CreateUserDTO
 )
@@ -22,10 +21,15 @@ def create(
         get_auth_service
     )
 ):
-
-    return service.create_user(
-        username=dto.username,
-        password=dto.password,
-        email=dto.email,
-        role=dto.role,
-    )
+    try:
+        return service.create_user(
+            username=dto.username,
+            password=dto.password,
+            email=dto.email,
+            role=dto.role,
+        )
+    except (DomainValidationError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
