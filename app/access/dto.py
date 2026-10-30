@@ -27,3 +27,13 @@ class AccessTokenMetadataDTO(BaseModel):
 
 class AccessTokenRevokeResponseDTO(BaseModel):
     message: str
+
+
+class ClientConnectionDTO(BaseModel):
+    id: str
+    hostname: str | None = None
+    tailscale_ip: str | None = None
+    online: bool = True
+    status: str = "ACTIVE"
+    last_seen: datetime | None = None
+    created_at: datetime | None = None

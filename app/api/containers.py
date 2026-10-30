@@ -16,6 +16,7 @@ from app.dto.response.container import (
 )
 
 from app.core.dependencies import (
+    get_db,
     get_container_service,
     get_container_creation_workflow,
     get_job_service,
@@ -36,7 +37,13 @@ from app.security.dependencies import get_current_user
 from app.models.user import User
 
 from app.access.manager import AccessTokenManager
-from app.access.dto import AccessTokenCreateResponseDTO, AccessTokenCreateRequestDTO, AccessTokenMetadataDTO
+from app.access.dto import (
+    AccessTokenCreateResponseDTO,
+    AccessTokenCreateRequestDTO,
+    AccessTokenMetadataDTO,
+    ClientConnectionDTO,
+)
+from sqlalchemy.orm import Session
 
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -352,6 +359,48 @@ def get_access_tokens(
         )
 
     return manager.list_tokens_metadata(id)
+
+
+@router.get(
+    "/containers/{id}/connections",
+    response_model=list[ClientConnectionDTO],
+)
+def get_container_connections(
+    id: str,
+    db: Session = Depends(get_db),
+    container_service: ContainerService = Depends(get_container_service),
+):
+    try:
+        container_service.get(id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Container '{id}' não encontrado",
+        )
+
+    from app.models.client_connection import ClientConnection
+    from sqlalchemy import or_
+
+    connections = (
+        db.query(ClientConnection)
+        .filter(or_(ClientConnection.container_id == id, ClientConnection.container_id.is_(None)))
+        .order_by(ClientConnection.online.desc(), ClientConnection.last_seen.desc())
+        .all()
+    )
+
+    from app.access.manager import _ensure_utc
+    return [
+        ClientConnectionDTO(
+            id=c.id,
+            hostname=c.hostname,
+            tailscale_ip=c.tailscale_ip,
+            online=c.online,
+            status=c.status,
+            last_seen=_ensure_utc(c.last_seen),
+            created_at=_ensure_utc(c.created_at),
+        )
+        for c in connections
+    ]
 
 
 @router.post(

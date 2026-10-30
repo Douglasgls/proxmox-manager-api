@@ -108,3 +108,26 @@ def test_proxmox_permission_denied_exception_handler(auth_client, sample_contain
         assert data["required_permission"] == "Sys.Audit"
         assert data["path"] == "/nodes/pve"
         assert "Permissão insuficiente" in data["detail"]
+
+
+def test_get_container_connections_success(auth_client, sample_container, db):
+    from app.models.client_connection import ClientConnection
+    conn = ClientConnection(
+        id="conn-test-1",
+        container_id=sample_container.id,
+        hostname="laptop-dev",
+        tailscale_ip="100.64.0.50",
+        online=True,
+        status="ACTIVE",
+    )
+    db.add(conn)
+    db.commit()
+
+    response = auth_client.get(f"/api/containers/{sample_container.id}/connections")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 1
+    item = next(c for c in data if c["id"] == "conn-test-1")
+    assert item["hostname"] == "laptop-dev"
+    assert item["tailscale_ip"] == "100.64.0.50"
+    assert item["online"] is True

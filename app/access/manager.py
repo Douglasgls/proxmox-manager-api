@@ -49,6 +49,17 @@ class AccessTokenManager:
         
     def list_tokens_metadata(self, container_id: str) -> list[AccessTokenMetadataDTO]:
         tokens = self.service.list_by_container(container_id)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        changed = False
+        for t in tokens:
+            if t.active and t.expires_at < now:
+                t.active = False
+                changed = True
+        if changed:
+            try:
+                self.service.repository.session.commit()
+            except Exception:
+                pass
         
         return [
             AccessTokenMetadataDTO(
