@@ -72,6 +72,40 @@ get_server_ip() {
 }
 
 # ============================================================
+# Sincronização de Horário (NTP)
+# ============================================================
+
+sync_server_time() {
+    log "========================================="
+    log "Sincronização de Horário (NTP)"
+    log "========================================="
+
+    log "Garantindo sincronização de relógio via NTP..."
+
+    # Garante que um daemon NTP esteja instalado (chrony ou systemd-timesyncd)
+    if ! command -v chronyd >/dev/null 2>&1 && ! systemctl is-active --quiet systemd-timesyncd 2>/dev/null; then
+        log "Instalando chrony para sincronização de relógio precisa..."
+        apt-get update -y >/dev/null 2>&1 || true
+        apt-get install -y chrony >/dev/null 2>&1 || apt-get install -y systemd-timesyncd >/dev/null 2>&1 || true
+    fi
+
+    # Ativa sincronização NTP no systemd
+    timedatectl set-ntp true 2>/dev/null || true
+
+    # Força a sincronização imediata do relógio
+    if command -v chronyc >/dev/null 2>&1; then
+        systemctl enable --now chrony >/dev/null 2>&1 || true
+        chronyc makestep >/dev/null 2>&1 || true
+    elif systemctl list-unit-files | grep -q systemd-timesyncd; then
+        systemctl enable --now systemd-timesyncd >/dev/null 2>&1 || true
+        systemctl restart systemd-timesyncd >/dev/null 2>&1 || true
+    fi
+
+    log "Status da sincronização de horário do servidor:"
+    timedatectl status 2>/dev/null || date
+}
+
+# ============================================================
 # PostgreSQL
 # ============================================================
 
@@ -433,6 +467,7 @@ main() {
     check_os
     prepare_directories
     get_server_ip
+    sync_server_time
 
     # 1. Banco
     install_database_stack
