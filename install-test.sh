@@ -395,26 +395,37 @@ EOF
 }
 
 start_backend_service() {
-    log "Iniciando Agent..."
+    log "Iniciando Agent ($BACKEND_SERVICE)..."
     systemctl restart "$BACKEND_SERVICE"
-    sleep 3
-
-    if ! systemctl is-active --quiet "$BACKEND_SERVICE"; then
-        journalctl -u "$BACKEND_SERVICE" --no-pager -n 50
-        error "Agent não iniciou corretamente."
-    fi
-    log "Agent iniciado com sucesso."
+    log "Serviço acionado."
 }
 
 check_backend_service() {
-    log "Verificando Health Check do Agent..."
-    if ! curl -fsS "http://127.0.0.1:$BACKEND_PORT/api/health" >/dev/null; then
-        log "Health check via /api/health falhou (ou rota não existe). Tentando porta HTTP pura..."
-        if ! curl -fsS "http://127.0.0.1:$BACKEND_PORT" >/dev/null; then
-            error "Agent não está respondendo na porta $BACKEND_PORT."
+    log "Aguardando e verificando Health Check do Agent na porta $BACKEND_PORT..."
+    local max_attempts=20
+    local attempt=1
+
+    while [ $attempt -le $max_attempts ]; do
+        if ! systemctl is-active --quiet "$BACKEND_SERVICE"; then
+            echo ""
+            journalctl -u "$BACKEND_SERVICE" --no-pager -n 50
+            error "O serviço $BACKEND_SERVICE parou de responder durante a inicialização."
         fi
-    fi
-    log "Health check OK."
+
+        if curl -fsS "http://127.0.0.1:$BACKEND_PORT/api/health" >/dev/null 2>&1 || curl -fsS "http://127.0.0.1:$BACKEND_PORT" >/dev/null 2>&1; then
+            echo ""
+            log "Health check OK! Agent respondendo com sucesso na porta $BACKEND_PORT."
+            return 0
+        fi
+
+        echo -n "."
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+
+    echo ""
+    journalctl -u "$BACKEND_SERVICE" --no-pager -n 50
+    error "Agent não respondeu na porta $BACKEND_PORT após 40 segundos de inicialização."
 }
 
 main() {
