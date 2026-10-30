@@ -3,7 +3,11 @@ from app.schemas.agent_config import AgentConfigUpdate, AgentConfigResponse, Age
 from app.services.agent_config_service import AgentConfigService
 from app.core.dependencies import get_agent_config_service
 from app.integrations.proxmox.proxmox_client import ProxmoxClient
-from app.integrations.proxmox.exceptions import ProxmoxConnectionError
+from app.integrations.proxmox.exceptions import (
+    ProxmoxAPIError,
+    ProxmoxConnectionError,
+    ProxmoxPermissionError,
+)
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -32,6 +36,11 @@ def save_config(
         )
         # Validate connection before saving
         client.get_version()
+    except ProxmoxPermissionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permissão insuficiente no Proxmox VE: {e.message}",
+        )
     except ProxmoxConnectionError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -60,9 +69,33 @@ def test_connection(data: AgentTestConnection):
             token_value=data.proxmox_token_value,
             node=data.proxmox_node,
         )
-        # Tenta listar os nós para validar a conexão
+        # Tenta conectar e validar a versão
         client.get_version()
-        return {"success": True, "message": "Conexão estabelecida com sucesso."}
+        
+        # Validação adicional de leitura do nó (Sys.Audit)
+        warning_msg = None
+        try:
+            client.get_node_status()
+        except ProxmoxPermissionError as perm_err:
+            warning_msg = (
+                f"Conectado com sucesso, mas o token/usuário não possui a permissão '{perm_err.required_permission}' "
+                f"no caminho '{perm_err.path}'. Adicione a permissão no Proxmox VE (Datacenter > Permissions) "
+                f"para habilitar o monitoramento de recursos do host."
+            )
+
+        if warning_msg:
+            return {
+                "success": True,
+                "message": warning_msg,
+                "has_warning": True,
+            }
+
+        return {"success": True, "message": "Conexão com o Proxmox VE estabelecida e validada com sucesso."}
+    except ProxmoxPermissionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permissão insuficiente no Proxmox VE: {e.message}",
+        )
     except ProxmoxConnectionError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
